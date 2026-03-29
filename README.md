@@ -316,6 +316,42 @@ Before first use, run the root migration command once against the target Postgre
 bun run migrate
 ```
 
+### Railway worker container
+
+A Railway-ready worker container is included at:
+
+- [`Dockerfile.worker`](/home/ec2-user/development/personal/discofork/Dockerfile.worker)
+- [`railway.worker.toml`](/home/ec2-user/development/personal/discofork/railway.worker.toml)
+
+The worker container installs:
+
+- Bun
+- Git
+- GitHub CLI (`gh`)
+- Codex CLI
+
+Required worker environment variables:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `GH_TOKEN` or `GITHUB_TOKEN`
+- `OPENAI_API_KEY`
+
+Optional worker tuning:
+
+- `DISCOFORK_FORK_SCAN_LIMIT`
+- `DISCOFORK_RECOMMENDED_FORK_LIMIT`
+- `DISCOFORK_COMPARE_CONCURRENCY`
+
+The container startup script will:
+
+1. verify required env vars
+2. authenticate Codex from `OPENAI_API_KEY` if needed
+3. run `bun run migrate`
+4. start `bun run worker`
+
+On Railway, create a separate service from the repo root and point it at `Dockerfile.worker`.
+
 ## Example output
 
 Checked-in example exports live in:

@@ -1,0 +1,15 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+watchPatterns = [
+  "/src/**",
+  "/migrations/**",
+  "/package.json",
+  "/bun.lock",
+  "/Dockerfile.worker",
+  "/scripts/worker-entrypoint.sh",
+]
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
