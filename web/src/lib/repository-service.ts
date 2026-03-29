@@ -261,8 +261,9 @@ export async function resolveRepositoryView(owner: string, repo: string): Promis
       return mapStoredReportToView(record)
     }
 
-    await touchQueuedRepo(owner, repo)
-    await enqueueRepoJob(fullName)
+    const queuedNow = await enqueueRepoJob(fullName)
+    await touchQueuedRepo(owner, repo, queuedNow)
+    const refreshedRecord = await getRepoRecord(fullName)
 
     return {
       kind: "queued",
@@ -270,8 +271,8 @@ export async function resolveRepositoryView(owner: string, repo: string): Promis
       repo,
       fullName,
       githubUrl: `https://github.com/${fullName}`,
-      queuedAt: record?.queued_at ?? new Date().toISOString(),
-      queueHint: queueHintForStatus(record?.status),
+      queuedAt: refreshedRecord?.queued_at ?? record?.queued_at ?? new Date().toISOString(),
+      queueHint: queueHintForStatus(refreshedRecord?.status ?? record?.status),
     }
   }
 

@@ -41,7 +41,7 @@ export async function getRepoRecord(fullName: string): Promise<RepoRecord | null
   return rows[0] ?? null
 }
 
-export async function touchQueuedRepo(owner: string, repo: string): Promise<void> {
+export async function touchQueuedRepo(owner: string, repo: string, queuedNow: boolean): Promise<void> {
   const fullName = `${owner}/${repo}`
   const githubUrl = `https://github.com/${fullName}`
 
@@ -55,20 +55,23 @@ export async function touchQueuedRepo(owner: string, repo: string): Promise<void
       repo = excluded.repo,
       github_url = excluded.github_url,
       status = case
-        when repo_reports.status = 'ready' and repo_reports.report_json is not null then repo_reports.status
+        when repo_reports.status = 'ready' and repo_reports.report_json is not null and $5 = false then repo_reports.status
+        when repo_reports.status in ('queued', 'processing') and $5 = false then repo_reports.status
         else 'queued'
       end,
       error_message = case
-        when repo_reports.status = 'ready' and repo_reports.report_json is not null then repo_reports.error_message
+        when (repo_reports.status = 'ready' and repo_reports.report_json is not null and $5 = false)
+          or (repo_reports.status in ('queued', 'processing') and $5 = false)
+          then repo_reports.error_message
         else null
       end,
       last_requested_at = now(),
       queued_at = case
-        when repo_reports.status = 'ready' and repo_reports.report_json is not null then repo_reports.queued_at
-        else now()
+        when $5 = true then now()
+        else coalesce(repo_reports.queued_at, now())
       end,
       updated_at = now()`,
-    [fullName, owner, repo, githubUrl],
+    [fullName, owner, repo, githubUrl, queuedNow],
   )
 }
 

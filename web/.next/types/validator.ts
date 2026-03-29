@@ -65,10 +65,28 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/repos/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/repos">> = Specific
+  const handler = {} as typeof import("../../src/app/repos/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/repo/[owner]/[repo]/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/repo/[owner]/[repo]">> = Specific
   const handler = {} as typeof import("../../src/app/api/repo/[owner]/[repo]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/repos/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/repos">> = Specific
+  const handler = {} as typeof import("../../src/app/api/repos/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

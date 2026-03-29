@@ -37,6 +37,10 @@ export default function HomePage() {
                   Download install.sh
                   <ArrowRight className="h-4 w-4" />
                 </a>
+                <Link href="/repos" className={cn(buttonVariants({ variant: "outline" }), "rounded-full px-5")}>
+                  Browse cached repos
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
                 <Link href="/vultuk/discofork" className={cn(buttonVariants({ variant: "outline" }), "rounded-full px-5")}>
                   View repo layout
                   <ArrowRight className="h-4 w-4" />
@@ -104,8 +108,8 @@ export default function HomePage() {
             <div className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">Runtime requirements</div>
             <ul className="space-y-3 text-sm leading-7 text-muted-foreground">
               <li>Discofork analysis still runs locally and depends on Bun, `git`, `gh`, and `codex`.</li>
-              <li>This web app only renders cached briefs or a queued placeholder state.</li>
-              <li>Backend queueing and database refresh are intentionally left out of this frontend pass.</li>
+              <li>This web app reads cached briefs through its backend and queues missing repos for worker processing.</li>
+              <li>The `/repos` page lists everything currently stored in Postgres.</li>
             </ul>
           </div>
         </div>

@@ -26,14 +26,19 @@ export function RepoShell({
           <Link href="/" className="transition-opacity hover:opacity-80">
             <Wordmark />
           </Link>
-          <a
-            href="https://github.com/vultuk/discofork"
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ variant: "ghost" }), "gap-2 text-slate-600")}
-          >
-            GitHub <ArrowUpRight className="h-4 w-4" />
-          </a>
+          <div className="flex items-center gap-2">
+            <Link href="/repos" className={cn(buttonVariants({ variant: "ghost" }), "text-slate-600")}>
+              Repos
+            </Link>
+            <a
+              href="https://github.com/vultuk/discofork"
+              target="_blank"
+              rel="noreferrer"
+              className={cn(buttonVariants({ variant: "ghost" }), "gap-2 text-slate-600")}
+            >
+              GitHub <ArrowUpRight className="h-4 w-4" />
+            </a>
+          </div>
         </div>
       </header>
 

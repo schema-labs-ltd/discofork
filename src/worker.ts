@@ -3,7 +3,7 @@ import path from "node:path"
 import { toErrorMessage } from "./core/errors.ts"
 import { loadDiscovery, runAnalysis } from "./services/analysis.ts"
 import { parseGitHubRepoInput } from "./services/github.ts"
-import { clearRepoJob, dequeueRepoJob } from "./server/queue.ts"
+import { acknowledgeRepoJob, dequeueRepoJob } from "./server/queue.ts"
 import { markRepoFailed, markRepoProcessing, markRepoReady } from "./server/reports.ts"
 
 const workerOptions = {
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
       console.error(`Failed ${fullName}: ${message}`)
       await markRepoFailed(fullName, message)
     } finally {
-      await clearRepoJob(fullName)
+      await acknowledgeRepoJob(fullName)
     }
   }
 }
