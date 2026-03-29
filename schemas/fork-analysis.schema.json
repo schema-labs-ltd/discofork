@@ -8,6 +8,8 @@
     "changeMagnitude",
     "likelyPurpose",
     "changeCategories",
+    "additionalFeatures",
+    "missingFeatures",
     "strengths",
     "risks",
     "idealUsers",
@@ -44,6 +46,20 @@
           "significant_divergence",
           "maintenance_only"
         ]
+      },
+      "maxItems": 6
+    },
+    "additionalFeatures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "missingFeatures": {
+      "type": "array",
+      "items": {
+        "type": "string"
       },
       "maxItems": 6
     },

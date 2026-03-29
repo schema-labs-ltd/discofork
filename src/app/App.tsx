@@ -1,14 +1,15 @@
 import path from "node:path"
-import { type InputRenderable } from "@opentui/core"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { type InputRenderable, type ScrollBoxRenderable } from "@opentui/core"
+import { type JSX, useEffect, useMemo, useRef, useState } from "react"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 
 import { toErrorMessage } from "../core/errors.ts"
 import { formatRelativeDays, truncate } from "../core/format.ts"
-import type { DiscoveryResult, FinalReport, ForkMetadata, GitHubRepoRef, ProgressEvent } from "../core/types.ts"
+import type { DiscoveryResult, FinalReport, ForkMetadata, ForkSelectionStrategy, GitHubRepoRef, ProgressEvent } from "../core/types.ts"
 import type { CliOptions } from "./args.ts"
 import { loadDiscovery, runAnalysis } from "../services/analysis.ts"
 import { parseGitHubRepoInput } from "../services/github.ts"
+import { compareForksForSelection, recommendForks } from "../services/heuristics.ts"
 
 type AppState =
   | { screen: "input" }
@@ -24,6 +25,13 @@ type AnalysisResult = {
     markdownPath: string
   }
   logPath: string
+}
+
+const SPINNER_FRAMES = ["|", "/", "-", "\\"]
+
+function renderBulletItems(items: string[], emptyLabel = "None"): JSX.Element[] {
+  const values = (items ?? []).length > 0 ? items : [emptyLabel]
+  return values.map((item, index) => <text key={`${index}-${item}`}>- {item}</text>) as JSX.Element[]
 }
 
 function isConfirmKey(name: string): boolean {
@@ -48,7 +56,7 @@ function pushLog(setter: React.Dispatch<React.SetStateAction<string[]>>, event: 
 function selectionSummary(discovery: DiscoveryResult, selectedCount: number): string {
   const parts = [
     `${discovery.totalForkCount} total forks`,
-    `${discovery.scannedForkCount} scanned`,
+    `${discovery.scannedForkCount} checked`,
     `${selectedCount} selected`,
   ]
 
@@ -73,12 +81,15 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null)
   const [selectedForks, setSelectedForks] = useState<Set<string>>(new Set())
+  const [selectionStrategy, setSelectionStrategy] = useState<ForkSelectionStrategy>("stars")
   const [filterInput, setFilterInput] = useState("")
-  const [focusMode, setFocusMode] = useState<"repo" | "filter" | "list">("repo")
+  const [focusMode, setFocusMode] = useState<"repo" | "filter" | "list" | "detail" | "none">("repo")
   const [listIndex, setListIndex] = useState(0)
   const [progressLines, setProgressLines] = useState<string[]>([])
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const repoInputRef = useRef<InputRenderable | null>(null)
+  const detailScrollRef = useRef<ScrollBoxRenderable | null>(null)
+  const [spinnerIndex, setSpinnerIndex] = useState(0)
 
   const visibleForks = useMemo(() => {
     if (!discovery) {
@@ -86,15 +97,17 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
     }
 
     const query = filterInput.trim().toLowerCase()
-    if (!query) {
-      return discovery.forks
-    }
+    const filteredForks = !query
+      ? discovery.forks
+      : discovery.forks.filter((fork) => {
+          const haystack = [fork.fullName, fork.description ?? "", fork.scoreReasons.join(" ")].join(" ").toLowerCase()
+          return haystack.includes(query)
+        })
 
-    return discovery.forks.filter((fork) => {
-      const haystack = [fork.fullName, fork.description ?? "", fork.scoreReasons.join(" ")].join(" ").toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [discovery, filterInput])
+    return filteredForks
+      .slice()
+      .sort((left, right) => compareForksForSelection(left, right, selectionStrategy))
+  }, [discovery, filterInput, selectionStrategy])
 
   const highlightedFork = visibleForks[Math.min(listIndex, Math.max(0, visibleForks.length - 1))] ?? null
   const reportHighlightedFork =
@@ -108,8 +121,36 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
     void beginDiscovery(cliOptions.repoUrl)
   }, [])
 
+  useEffect(() => {
+    if (appState.screen !== "loading") {
+      setSpinnerIndex(0)
+      return
+    }
+
+    const timer = setInterval(() => {
+      setSpinnerIndex((index) => (index + 1) % SPINNER_FRAMES.length)
+    }, 120)
+
+    return () => clearInterval(timer)
+  }, [appState.screen])
+
+  function markRecommendedForks(strategy: ForkSelectionStrategy, forks: ForkMetadata[]): Map<string, boolean> {
+    const recommended = recommendForks(forks, cliOptions.recommendedForkLimit, strategy)
+    for (const fork of forks) {
+      fork.defaultSelected = recommended.has(fork.fullName)
+    }
+    return recommended
+  }
+
+  function applyDefaultSelection(strategy: ForkSelectionStrategy, forks: ForkMetadata[]): void {
+    setSelectionStrategy(strategy)
+    setSelectedForks(new Set(markRecommendedForks(strategy, forks).keys()))
+    setListIndex(0)
+  }
+
   async function beginDiscovery(rawInput: string): Promise<void> {
     setErrorMessage(null)
+    setFocusMode("none")
     setAppState({ screen: "loading", message: "Discovering forks" })
     setProgressLines([])
 
@@ -126,6 +167,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
         makeRunId(),
       )
 
+      markRecommendedForks(selectionStrategy, discoveryResult.forks)
       setDiscovery(discoveryResult)
       setSelectedForks(new Set(discoveryResult.forks.filter((fork) => fork.defaultSelected).map((fork) => fork.fullName)))
       setListIndex(0)
@@ -133,6 +175,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
       setAppState({ screen: "selection" })
     } catch (error) {
       setErrorMessage(toErrorMessage(error))
+      setFocusMode("repo")
       setAppState({ screen: "input" })
     }
   }
@@ -161,6 +204,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
           includeArchived: cliOptions.includeArchived,
           forkScanLimit: cliOptions.forkScanLimit,
           recommendedForkLimit: cliOptions.recommendedForkLimit,
+          compareConcurrency: cliOptions.compareConcurrency,
           selectedForks: forks.map((fork) => fork.fullName),
           maxCommitSamples: 12,
           maxChangedFiles: 12,
@@ -173,6 +217,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
 
       setAnalysisResult(result)
       setListIndex(0)
+      setFocusMode("list")
       setAppState({ screen: "results" })
     } catch (error) {
       setErrorMessage(toErrorMessage(error))
@@ -204,7 +249,9 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
     }
 
     if (appState.screen === "input") {
-      if (isConfirmKey(key.name)) {
+      if (key.name === "tab" && key.shift) {
+        setSelectionStrategy((strategy) => (strategy === "stars" ? "recent" : "stars"))
+      } else if (isConfirmKey(key.name)) {
         void beginDiscovery(repoInput)
       }
       return
@@ -229,7 +276,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
       } else if (key.name === "space" && highlightedFork) {
         toggleSelectedFork(highlightedFork.fullName)
       } else if (key.name === "a" && discovery) {
-        setSelectedForks(new Set(discovery.forks.filter((fork) => fork.defaultSelected).map((fork) => fork.fullName)))
+        applyDefaultSelection(selectionStrategy, discovery.forks)
       } else if (key.name === "c") {
         setSelectedForks(new Set())
       } else if (key.name === "slash") {
@@ -249,12 +296,19 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
     }
 
     if (appState.screen === "results") {
-      if (key.name === "j" || key.name === "down") {
+      if (key.name === "tab") {
+        setFocusMode((mode) => (mode === "detail" ? "list" : "detail"))
+      } else if (focusMode === "detail" && (key.name === "j" || key.name === "down")) {
+        detailScrollRef.current?.scrollBy({ x: 0, y: 1 }, "step")
+      } else if (focusMode === "detail" && (key.name === "k" || key.name === "up")) {
+        detailScrollRef.current?.scrollBy({ x: 0, y: -1 }, "step")
+      } else if (key.name === "j" || key.name === "down") {
         setListIndex((index) => Math.min(index + 1, Math.max(0, (analysisResult?.report.forks.length ?? 1) - 1)))
       } else if (key.name === "k" || key.name === "up") {
         setListIndex((index) => Math.max(index - 1, 0))
       } else if (key.name === "u") {
         setAppState({ screen: "selection" })
+        setFocusMode("list")
       }
     }
   })
@@ -264,8 +318,8 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
   const listSlice = visibleForks.slice(listStart, listStart + listHeight)
 
   return (
-    <box flexDirection="column" padding={1} gap={1}>
-      <box border borderStyle="rounded" padding={1} flexDirection="column">
+    <box flexDirection="column" padding={1} gap={1} width="100%" height="100%">
+      <box border borderStyle="rounded" padding={1} flexDirection="column" flexShrink={0}>
         <ascii-font font="tiny" text="Discofork" />
         <text>
           <span fg="#8ec07c">Local-first fork analysis with </span>
@@ -295,20 +349,25 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
               void beginDiscovery(submittedValue)
             }}
             placeholder="https://github.com/owner/repo"
-            focused={focusMode === "repo"}
+            focused={appState.screen === "input" && focusMode === "repo"}
           />
+          <text fg="#83a598">
+            Sort and default picks: {selectionStrategy === "stars" ? "highest stars" : "most recent"}
+          </text>
           <text fg="#b8bb26">
-            Enter = discover forks | default scan limit {cliOptions.forkScanLimit} | archived forks{" "}
+            Shift+Tab toggle sort | enter discover forks | changed-fork limit {cliOptions.forkScanLimit} | compare concurrency {cliOptions.compareConcurrency} | archived forks{" "}
             {cliOptions.includeArchived ? "included" : "ignored"}
           </text>
           {appState.screen === "loading" ? (
-            <text fg="#fabd2f">{appState.message}</text>
+            <text fg="#fabd2f">
+              {SPINNER_FRAMES[spinnerIndex]} {appState.message}
+            </text>
           ) : null}
         </box>
       ) : null}
 
       {appState.screen === "selection" && discovery ? (
-        <box flexDirection={width >= 130 ? "row" : "column"} gap={1}>
+        <box flexDirection={width >= 130 ? "row" : "column"} gap={1} flexGrow={1}>
           <box border padding={1} flexDirection="column" width={width >= 130 ? Math.floor(width * 0.52) : undefined}>
             <text>
               <strong>{discovery.upstream.fullName}</strong>
@@ -320,13 +379,16 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
                 Hidden {discovery.unchangedExcluded} fork{discovery.unchangedExcluded === 1 ? "" : "s"} with no upstream changes.
               </text>
             ) : null}
+            <text fg="#83a598">
+              Default picks from input step: {selectionStrategy === "stars" ? "highest stars" : "most recent activity"}.
+            </text>
             <input
               value={filterInput}
               onChange={setFilterInput}
               placeholder="Filter forks by owner, description, or score reason"
               focused={focusMode === "filter"}
             />
-            <text fg="#b8bb26">j/k move | space toggle | / focus filter | a defaults | c clear | enter analyze</text>
+            <text fg="#b8bb26">j/k move | space toggle | a defaults | c clear | / focus filter | enter analyze</text>
             <box flexDirection="column" marginTop={1}>
               {listSlice.length === 0 ? (
                 <text>No forks match the current filter.</text>
@@ -372,7 +434,7 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
       ) : null}
 
       {appState.screen === "analysis" ? (
-        <box border padding={1} flexDirection="column" gap={1}>
+        <box border padding={1} flexDirection="column" gap={1} flexGrow={1}>
           <text>
             <strong>Analysis in progress</strong>
           </text>
@@ -384,51 +446,109 @@ export function App({ cliOptions }: { cliOptions: CliOptions }) {
       ) : null}
 
       {appState.screen === "results" && analysisResult ? (
-        <box flexDirection={width >= 130 ? "row" : "column"} gap={1}>
-          <box border padding={1} flexDirection="column" width={width >= 130 ? Math.floor(width * 0.45) : undefined}>
-            <text>
-              <strong>Upstream</strong>
-            </text>
-            <text>{analysisResult.report.upstream.analysis.summary}</text>
-            <text fg="#8ec07c">Recommendations</text>
-            <text>- Best maintained: {analysisResult.report.recommendations.bestMaintained ?? "None"}</text>
-            <text>- Closest to upstream: {analysisResult.report.recommendations.closestToUpstream ?? "None"}</text>
-            <text>- Most feature-rich: {analysisResult.report.recommendations.mostFeatureRich ?? "None"}</text>
-            <text>- Most opinionated: {analysisResult.report.recommendations.mostOpinionated ?? "None"}</text>
-            <text fg="#83a598">Exports</text>
-            <text>{truncate(analysisResult.exports.markdownPath, width >= 130 ? 52 : width - 8)}</text>
-            <text>{truncate(analysisResult.exports.jsonPath, width >= 130 ? 52 : width - 8)}</text>
-            <text fg="#b8bb26">j/k move | u return to selection | q quit</text>
-            <box flexDirection="column" marginTop={1}>
-              {analysisResult.report.forks.map((fork, index) => (
-                <text key={fork.metadata.fullName} fg={index === listIndex ? "#fabd2f" : "#ebdbb2"}>
-                  {truncate(`${index === listIndex ? ">" : " "} ${fork.metadata.fullName}`, width >= 130 ? 52 : width - 8)}
+        <box flexDirection={width >= 130 ? "row" : "column"} gap={1} flexGrow={1}>
+          <box border padding={1} flexDirection="column" gap={1} width={width >= 130 ? Math.floor(width * 0.45) : undefined}>
+            <box flexDirection="column" gap={1} flexShrink={0}>
+              <box flexDirection="column" flexShrink={0}>
+                <text>
+                  <strong>Upstream</strong>
                 </text>
-              ))}
+                <text>{analysisResult.report.upstream.analysis.summary}</text>
+              </box>
+
+              <box flexDirection="column" flexShrink={0}>
+                <text fg="#8ec07c">
+                  <strong>Recommendation Snapshot</strong>
+                </text>
+                <text>- Best maintained: {analysisResult.report.recommendations.bestMaintained ?? "None"}</text>
+                <text>- Closest to upstream: {analysisResult.report.recommendations.closestToUpstream ?? "None"}</text>
+                <text>- Most feature-rich: {analysisResult.report.recommendations.mostFeatureRich ?? "None"}</text>
+                <text>- Most opinionated: {analysisResult.report.recommendations.mostOpinionated ?? "None"}</text>
+              </box>
+
+              <text fg="#b8bb26" flexShrink={0}>j/k move | tab detail scroll | u return to selection | q quit</text>
             </box>
+
+            <scrollbox flexGrow={1} flexShrink={1} minHeight={6} scrollY focused={focusMode === "list"}>
+              <box flexDirection="column">
+                <text fg="#83a598">
+                  <strong>Analysed Forks</strong>
+                </text>
+                {analysisResult.report.forks.map((fork, index) => (
+                  <text key={fork.metadata.fullName} fg={index === listIndex ? "#fabd2f" : "#ebdbb2"}>
+                    {truncate(`${index === listIndex ? ">" : " "} ${fork.metadata.fullName}`, width >= 130 ? 52 : width - 8)}
+                  </text>
+                ))}
+              </box>
+            </scrollbox>
           </box>
 
           <box border padding={1} flexDirection="column" flexGrow={1}>
             {reportHighlightedFork ? (
-              <>
-                <text>
-                  <strong>{reportHighlightedFork.metadata.fullName}</strong>
-                </text>
-                <text>{reportHighlightedFork.analysis.decisionSummary}</text>
-                <text fg="#83a598">
-                  maintenance {reportHighlightedFork.analysis.maintenance} | magnitude {reportHighlightedFork.analysis.changeMagnitude}
-                </text>
-                <text>Likely purpose: {reportHighlightedFork.analysis.likelyPurpose}</text>
-                <text>Best for: {reportHighlightedFork.analysis.idealUsers.join("; ")}</text>
-                <text>Strengths:</text>
-                {reportHighlightedFork.analysis.strengths.map((item) => (
-                  <text key={item}>- {item}</text>
-                ))}
-                <text>Risks:</text>
-                {reportHighlightedFork.analysis.risks.map((item) => (
-                  <text key={item}>- {item}</text>
-                ))}
-              </>
+              <scrollbox
+                ref={detailScrollRef}
+                flexGrow={1}
+                flexShrink={1}
+                minHeight={6}
+                scrollY
+                focused={focusMode === "detail"}
+              >
+                <box flexDirection="column" gap={1}>
+                  <box flexDirection="column">
+                    <text>
+                      <strong>{reportHighlightedFork.metadata.fullName}</strong>
+                    </text>
+                    <text>{reportHighlightedFork.analysis.decisionSummary}</text>
+                    <text fg="#83a598">
+                      maintenance {reportHighlightedFork.analysis.maintenance} | magnitude {reportHighlightedFork.analysis.changeMagnitude}
+                    </text>
+                  </box>
+
+                  <box flexDirection="column">
+                    <text fg="#8ec07c">
+                      <strong>Positioning</strong>
+                    </text>
+                    <text>Likely purpose: {reportHighlightedFork.analysis.likelyPurpose}</text>
+                    <text>Best for: {reportHighlightedFork.analysis.idealUsers.join("; ")}</text>
+                  </box>
+
+                  <box flexDirection="column">
+                    <text fg="#8ec07c">
+                      <strong>Additional Features</strong>
+                    </text>
+                    <box flexDirection="column">
+                      {renderBulletItems(reportHighlightedFork.analysis.additionalFeatures, "No clear additions called out.")}
+                    </box>
+                  </box>
+
+                  <box flexDirection="column">
+                    <text fg="#8ec07c">
+                      <strong>Missing Features</strong>
+                    </text>
+                    <box flexDirection="column">
+                      {renderBulletItems(reportHighlightedFork.analysis.missingFeatures, "No obvious missing features called out.")}
+                    </box>
+                  </box>
+
+                  <box flexDirection="column">
+                    <text fg="#8ec07c">
+                      <strong>Strengths</strong>
+                    </text>
+                    <box flexDirection="column">
+                      {renderBulletItems(reportHighlightedFork.analysis.strengths)}
+                    </box>
+                  </box>
+
+                  <box flexDirection="column">
+                    <text fg="#fb4934">
+                      <strong>Risks</strong>
+                    </text>
+                    <box flexDirection="column">
+                      {renderBulletItems(reportHighlightedFork.analysis.risks)}
+                    </box>
+                  </box>
+                </box>
+              </scrollbox>
             ) : (
               <text>No analysed fork selected.</text>
             )}

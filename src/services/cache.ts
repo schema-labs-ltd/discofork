@@ -10,6 +10,9 @@ import type {
 } from "../core/types.ts"
 import { writeJson } from "../core/fs.ts"
 
+const UPSTREAM_CACHE_VERSION = 1
+const FORK_CACHE_VERSION = 2
+
 type RepoSnapshot = {
   fullName: string
   defaultBranch: string
@@ -18,7 +21,7 @@ type RepoSnapshot = {
 }
 
 type UpstreamCacheEntry = {
-  version: 1
+  version: typeof UPSTREAM_CACHE_VERSION
   cachedAt: string
   upstream: RepoSnapshot
   repoFacts: RepoFacts
@@ -26,12 +29,41 @@ type UpstreamCacheEntry = {
 }
 
 type ForkCacheEntry = {
-  version: 1
+  version: typeof FORK_CACHE_VERSION
   cachedAt: string
   upstream: RepoSnapshot
   fork: RepoSnapshot
   diffFacts: DiffFacts
   analysis: ForkAnalysis
+}
+
+function normalizeForkAnalysis(analysis: Partial<ForkAnalysis> & Pick<ForkAnalysis, "fork">): ForkAnalysis {
+  const normalized: ForkAnalysis = {
+    maintenance: "unknown",
+    changeMagnitude: "minor",
+    likelyPurpose: "",
+    changeCategories: [],
+    additionalFeatures: [],
+    missingFeatures: [],
+    strengths: [],
+    risks: [],
+    idealUsers: [],
+    decisionSummary: "",
+    confidence: "medium",
+    evidence: [],
+    ...analysis,
+    fork: analysis.fork,
+  }
+
+  normalized.changeCategories = analysis.changeCategories ?? []
+  normalized.additionalFeatures = analysis.additionalFeatures ?? []
+  normalized.missingFeatures = analysis.missingFeatures ?? []
+  normalized.strengths = analysis.strengths ?? []
+  normalized.risks = analysis.risks ?? []
+  normalized.idealUsers = analysis.idealUsers ?? []
+  normalized.evidence = analysis.evidence ?? []
+
+  return normalized
 }
 
 function snapshot(metadata: RepoMetadata | ForkMetadata): RepoSnapshot {
@@ -47,8 +79,7 @@ function sameSnapshot(left: RepoSnapshot, right: RepoSnapshot): boolean {
   return (
     left.fullName === right.fullName &&
     left.defaultBranch === right.defaultBranch &&
-    left.pushedAt === right.pushedAt &&
-    left.updatedAt === right.updatedAt
+    left.pushedAt === right.pushedAt
   )
 }
 
@@ -66,7 +97,7 @@ export async function loadUpstreamCache(
   upstream: RepoMetadata,
 ): Promise<UpstreamCacheEntry | null> {
   const entry = await readJsonFile<UpstreamCacheEntry>(filePath)
-  if (!entry || entry.version !== 1) {
+  if (!entry || entry.version !== UPSTREAM_CACHE_VERSION) {
     return null
   }
 
@@ -80,7 +111,7 @@ export async function saveUpstreamCache(
   analysis: UpstreamAnalysis,
 ): Promise<void> {
   await writeJson(filePath, {
-    version: 1,
+    version: UPSTREAM_CACHE_VERSION,
     cachedAt: new Date().toISOString(),
     upstream: snapshot(upstream),
     repoFacts,
@@ -94,13 +125,18 @@ export async function loadForkCache(
   upstream: RepoMetadata,
 ): Promise<ForkCacheEntry | null> {
   const entry = await readJsonFile<ForkCacheEntry>(filePath)
-  if (!entry || entry.version !== 1) {
+  if (!entry || entry.version !== FORK_CACHE_VERSION) {
     return null
   }
 
-  return sameSnapshot(entry.upstream, snapshot(upstream)) && sameSnapshot(entry.fork, snapshot(fork))
-    ? entry
-    : null
+  if (!(sameSnapshot(entry.upstream, snapshot(upstream)) && sameSnapshot(entry.fork, snapshot(fork)))) {
+    return null
+  }
+
+  return {
+    ...entry,
+    analysis: normalizeForkAnalysis(entry.analysis),
+  }
 }
 
 export async function saveForkCache(
@@ -111,11 +147,11 @@ export async function saveForkCache(
   analysis: ForkAnalysis,
 ): Promise<void> {
   await writeJson(filePath, {
-    version: 1,
+    version: FORK_CACHE_VERSION,
     cachedAt: new Date().toISOString(),
     upstream: snapshot(upstream),
     fork: snapshot(fork),
     diffFacts,
-    analysis,
+    analysis: normalizeForkAnalysis(analysis),
   } satisfies ForkCacheEntry)
 }

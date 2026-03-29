@@ -18,12 +18,44 @@ import { loadForkCache, loadUpstreamCache, saveForkCache, saveUpstreamCache } fr
 import { commandExists } from "./command.ts"
 import { analyzeForkWithCodex, analyzeUpstreamWithCodex } from "./codex.ts"
 import { discoverForks, fetchRepoMetadata } from "./github.ts"
-import { cloneOrUpdateRepository, collectDiffFacts, collectRepoFacts, ensureUpstreamRemote } from "./git.ts"
+import {
+  cleanupManagedRepositories,
+  cloneOrUpdateRepository,
+  collectDiffFacts,
+  collectRepoFacts,
+  ensureUpstreamRemote,
+} from "./git.ts"
 import { computeRecommendations } from "./heuristics.ts"
 import { exportReport } from "./report.ts"
 import { createWorkspacePaths } from "./workspace.ts"
 
 type ProgressHandler = (event: ProgressEvent) => void
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  const workerCount = Math.max(1, Math.min(concurrency, items.length))
+  let nextIndex = 0
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+
+      if (currentIndex >= items.length) {
+        return
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex]!, currentIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
 
 export async function ensurePrerequisites(): Promise<void> {
   for (const tool of ["gh", "git", "codex"]) {
@@ -54,127 +86,139 @@ export async function runAnalysis(
 ): Promise<{ report: FinalReport; exports: ExportPaths; logPath: string }> {
   const paths = await createWorkspacePaths(options.workspaceRoot, repo, options.runId)
   const logger = createLogger(path.join(paths.logsRoot, `${options.runId}.jsonl`))
+  let outcome: { report: FinalReport; exports: ExportPaths; logPath: string } | null = null
 
-  onProgress({ type: "phase", phase: "setup", detail: "Checking local toolchain" })
-  await ensurePrerequisites()
+  try {
+    onProgress({ type: "phase", phase: "setup", detail: "Checking local toolchain" })
+    await ensurePrerequisites()
 
-  const upstreamMetadata = await fetchRepoMetadata(repo, logger)
-  const upstreamBranch = upstreamMetadata.defaultBranch
+    const upstreamMetadata = await fetchRepoMetadata(repo, logger)
+    const upstreamBranch = upstreamMetadata.defaultBranch
 
-  let upstreamFacts: RepoFacts
-  let upstreamAnalysis: UpstreamAnalysis
-  const cachedUpstream = await loadUpstreamCache(paths.upstreamCachePath, upstreamMetadata)
+    let upstreamFacts: RepoFacts
+    let upstreamAnalysis: UpstreamAnalysis
+    const cachedUpstream = await loadUpstreamCache(paths.upstreamCachePath, upstreamMetadata)
 
-  if (cachedUpstream) {
-    upstreamFacts = cachedUpstream.repoFacts
-    upstreamAnalysis = cachedUpstream.analysis
-    onProgress({ type: "phase", phase: "upstream", detail: `Using cached upstream analysis from ${cachedUpstream.cachedAt}` })
-  } else {
-    onProgress({ type: "phase", phase: "upstream", detail: "Cloning or updating upstream" })
-    await cloneOrUpdateRepository(repo, paths.upstreamRepoDir, upstreamBranch, logger)
-
-    onProgress({ type: "phase", phase: "upstream", detail: "Collecting upstream facts" })
-    upstreamFacts = await collectRepoFacts(paths.upstreamRepoDir, upstreamMetadata, logger)
-
-    upstreamAnalysis = await analyzeUpstreamWithCodex(
-      upstreamFacts,
-      path.join(cwd, "schemas", "upstream-analysis.schema.json"),
-      path.join(paths.codexRoot, "upstream"),
-      paths.upstreamRepoDir,
-      logger,
-    )
-
-    await saveUpstreamCache(paths.upstreamCachePath, upstreamMetadata, upstreamFacts, upstreamAnalysis)
-  }
-
-  const analysedForks: FinalReport["forks"] = []
-
-  for (const fork of selectedForks) {
-    const cachedFork = await loadForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata)
-    let diffFacts: DiffFacts
-    let analysis: ForkAnalysis
-
-    if (cachedFork) {
-      diffFacts = cachedFork.diffFacts
-      analysis = cachedFork.analysis
-      onProgress({ type: "fork", fork: fork.fullName, detail: `Using cached fork analysis from ${cachedFork.cachedAt}` })
+    if (cachedUpstream) {
+      upstreamFacts = cachedUpstream.repoFacts
+      upstreamAnalysis = cachedUpstream.analysis
+      onProgress({ type: "phase", phase: "upstream", detail: `Using cached upstream analysis from ${cachedUpstream.cachedAt}` })
     } else {
-      onProgress({ type: "fork", fork: fork.fullName, detail: "Cloning or updating fork" })
-      const forkDir = paths.forkRepoDir(fork.fullName)
-      const [forkOwner, forkName] = fork.fullName.split("/")
-      const forkRef: GitHubRepoRef = {
-        owner: forkOwner!,
-        name: forkName!,
-        fullName: fork.fullName,
-        url: `https://github.com/${fork.fullName}`,
-        cloneUrl: `https://github.com/${fork.fullName}.git`,
-      }
+      onProgress({ type: "phase", phase: "upstream", detail: "Cloning or updating upstream" })
+      await cloneOrUpdateRepository(repo, paths.upstreamRepoDir, upstreamBranch, logger)
 
-      await cloneOrUpdateRepository(forkRef, forkDir, fork.defaultBranch, logger)
-      await ensureUpstreamRemote(forkDir, repo, upstreamBranch, logger)
+      onProgress({ type: "phase", phase: "upstream", detail: "Collecting upstream facts" })
+      upstreamFacts = await collectRepoFacts(paths.upstreamRepoDir, upstreamMetadata, logger)
 
-      onProgress({ type: "fork", fork: fork.fullName, detail: "Comparing against upstream" })
-      diffFacts = await collectDiffFacts(
-        forkDir,
-        fork.defaultBranch,
-        upstreamBranch,
-        options.maxCommitSamples,
-        options.maxChangedFiles,
-        logger,
-      )
-
-      onProgress({ type: "fork", fork: fork.fullName, detail: "Interpreting changes with Codex" })
-      analysis = await analyzeForkWithCodex(
-        fork,
+      upstreamAnalysis = await analyzeUpstreamWithCodex(
         upstreamFacts,
-        diffFacts,
-        upstreamAnalysis,
-        path.join(cwd, "schemas", "fork-analysis.schema.json"),
-        path.join(paths.codexRoot, fork.fullName.replace("/", "__")),
-        forkDir,
+        path.join(cwd, "schemas", "upstream-analysis.schema.json"),
+        path.join(paths.codexRoot, "upstream"),
+        paths.upstreamRepoDir,
         logger,
       )
 
-      await saveForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata, diffFacts, analysis)
+      await saveUpstreamCache(paths.upstreamCachePath, upstreamMetadata, upstreamFacts, upstreamAnalysis)
     }
 
-    analysedForks.push({
-      metadata: fork,
-      diffFacts,
-      analysis,
+    const compareConcurrency = Math.max(1, options.compareConcurrency)
+    onProgress({
+      type: "phase",
+      phase: "forks",
+      detail: `Processing ${selectedForks.length} selected forks with concurrency ${compareConcurrency}`,
     })
+
+    const analysedForks = await mapWithConcurrency(selectedForks, compareConcurrency, async (fork) => {
+      const cachedFork = await loadForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata)
+      let diffFacts: DiffFacts
+      let analysis: ForkAnalysis
+
+      if (cachedFork) {
+        diffFacts = cachedFork.diffFacts
+        analysis = cachedFork.analysis
+        onProgress({ type: "fork", fork: fork.fullName, detail: `Using cached fork analysis from ${cachedFork.cachedAt}` })
+      } else {
+        onProgress({ type: "fork", fork: fork.fullName, detail: "Cloning or updating fork" })
+        const forkDir = paths.forkRepoDir(fork.fullName)
+        const [forkOwner, forkName] = fork.fullName.split("/")
+        const forkRef: GitHubRepoRef = {
+          owner: forkOwner!,
+          name: forkName!,
+          fullName: fork.fullName,
+          url: `https://github.com/${fork.fullName}`,
+          cloneUrl: `https://github.com/${fork.fullName}.git`,
+        }
+
+        await cloneOrUpdateRepository(forkRef, forkDir, fork.defaultBranch, logger)
+        await ensureUpstreamRemote(forkDir, repo, upstreamBranch, logger)
+
+        onProgress({ type: "fork", fork: fork.fullName, detail: "Comparing against upstream" })
+        diffFacts = await collectDiffFacts(
+          forkDir,
+          fork.defaultBranch,
+          upstreamBranch,
+          options.maxCommitSamples,
+          options.maxChangedFiles,
+          logger,
+        )
+
+        onProgress({ type: "fork", fork: fork.fullName, detail: "Interpreting changes with Codex" })
+        analysis = await analyzeForkWithCodex(
+          fork,
+          upstreamFacts,
+          diffFacts,
+          upstreamAnalysis,
+          path.join(cwd, "schemas", "fork-analysis.schema.json"),
+          path.join(paths.codexRoot, fork.fullName.replace("/", "__")),
+          forkDir,
+          logger,
+        )
+
+        await saveForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata, diffFacts, analysis)
+      }
+
+      return {
+        metadata: fork,
+        diffFacts,
+        analysis,
+      }
+    })
+
+    onProgress({ type: "phase", phase: "report", detail: "Rendering export files" })
+    const report: FinalReport = {
+      generatedAt: new Date().toISOString(),
+      repository: repo,
+      upstream: {
+        ...upstreamFacts,
+        analysis: upstreamAnalysis,
+      },
+      discovery: {
+        totalForkCount: upstreamMetadata.forkCount,
+        scannedForkCount: selectedForks.length,
+        archivedExcluded: 0,
+        unchangedExcluded: 0,
+        selectionWarning: null,
+      },
+      forks: analysedForks,
+      recommendations: computeRecommendations(analysedForks),
+    }
+
+    const exports: ExportPaths = {
+      jsonPath: path.join(paths.reportsRoot, "analysis.json"),
+      markdownPath: path.join(paths.reportsRoot, "analysis.md"),
+    }
+
+    await exportReport(report, exports)
+    outcome = {
+      report,
+      exports,
+      logPath: logger.path,
+    }
+  } finally {
+    onProgress({ type: "phase", phase: "cleanup", detail: "Removing local cloned repositories" })
+    await cleanupManagedRepositories(paths.reposRoot, logger)
   }
 
-  onProgress({ type: "phase", phase: "report", detail: "Rendering export files" })
-  const report: FinalReport = {
-    generatedAt: new Date().toISOString(),
-    repository: repo,
-    upstream: {
-      ...upstreamFacts,
-      analysis: upstreamAnalysis,
-    },
-    discovery: {
-      totalForkCount: upstreamMetadata.forkCount,
-      scannedForkCount: selectedForks.length,
-      archivedExcluded: 0,
-      unchangedExcluded: 0,
-      selectionWarning: null,
-    },
-    forks: analysedForks,
-    recommendations: computeRecommendations(analysedForks),
-  }
-
-  const exports: ExportPaths = {
-    jsonPath: path.join(paths.reportsRoot, "analysis.json"),
-    markdownPath: path.join(paths.reportsRoot, "analysis.md"),
-  }
-
-  await exportReport(report, exports)
   onProgress({ type: "status", message: "Analysis complete" })
-
-  return {
-    report,
-    exports,
-    logPath: logger.path,
-  }
+  return outcome!
 }

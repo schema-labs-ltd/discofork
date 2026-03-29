@@ -34,6 +34,7 @@ Discofork is built around that decision workflow.
 - Run structured, schema-constrained `codex exec` prompts
 - Persist prompts, raw Codex output, logs, and exports under `.discofork/`
 - Reuse cached upstream and fork analyses when neither upstream nor fork has changed since the last run
+- Delete temporary cloned repositories after each analysis run to avoid local disk bloat
 - Export a machine-readable JSON report and a human-readable Markdown report
 
 ## Requirements
@@ -49,6 +50,33 @@ OpenTUI is currently Bun-first, so Discofork uses Bun for runtime and tests.
 
 ```bash
 bun install
+```
+
+If you publish Discofork to npm, it can also be launched with:
+
+```bash
+npx discofork --help
+```
+
+The npm executable still requires Bun on `PATH`, because the runtime entrypoint is executed through Bun.
+
+For a one-shot installer similar to `curl ... | bash`, use:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vultuk/discofork/main/scripts/install.sh | bash
+```
+
+The installer:
+
+- installs Bun if it is missing
+- downloads Discofork into `~/.local/share/discofork`
+- installs runtime dependencies with Bun
+- creates a `discofork` launcher in `~/.local/bin`
+
+You can also target a specific ref:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vultuk/discofork/main/scripts/install.sh | bash -s -- --ref main
 ```
 
 ## Usage
@@ -71,19 +99,24 @@ Useful flags:
 bun run start -- --repo cli/go-gh --fork-scan-limit 60
 bun run start -- --repo cli/go-gh --include-archived
 bun run start -- --repo cli/go-gh --recommended-fork-limit 8
+bun run start -- --repo cli/go-gh --compare-concurrency 3
 ```
 
 ## TUI flow
 
 1. Enter a GitHub repository URL or `owner/name`.
 2. Discofork discovers upstream metadata and scans forks with `gh`.
-3. The selection screen shows a filtered fork list and preselects promising candidates.
-4. Press `Enter` to analyze the selected forks.
-5. Discofork clones locally, compares against upstream, runs Codex interpretation, and exports the report.
+3. Before discovery, choose whether default picks should favor highest-star forks or most recent forks.
+4. The selection screen shows a filtered fork list, filters unchanged forks before filling the visible scan window, and preselects candidates using the chosen mode.
+5. Press `Enter` to analyze the selected forks.
+6. Discofork clones locally, compares against upstream, runs Codex interpretation, and exports the report.
+
+Comparison work runs with bounded parallelism and defaults to `3` forks in flight at once. Override it with `--compare-concurrency`.
 
 Key controls:
 
 - `Enter`: discover or analyze
+- `Shift+Tab`: toggle highest-star vs most-recent defaults on the input screen
 - `j` / `k`: move in fork lists
 - `space`: toggle a fork
 - `/`: focus the filter input
@@ -112,6 +145,7 @@ Notable files:
 
 - `cache/<repo>/upstream.json`: cached upstream facts and summary keyed by upstream freshness
 - `cache/<repo>/forks/<fork>.json`: cached per-fork diff facts and interpretation keyed by both upstream and fork freshness
+- `repos/<repo>/...`: temporary clone workspace used during active analysis and deleted afterwards
 - `logs/<run-id>.jsonl`: structured app logs
 - `runs/<run-id>/codex/.../prompt.md`: exact Codex prompt used
 - `runs/<run-id>/codex/.../output.json`: final schema-constrained Codex output
@@ -134,7 +168,7 @@ Instead it gathers:
 
 Those structured facts are then passed into Codex with JSON Schema constraints.
 
-Discofork also keeps an internal cache. If the upstream repository and a fork both have the same `pushedAt` / `updatedAt` snapshot as a previous run, Discofork reuses the stored facts and analysis instead of cloning, diffing, and prompting Codex again.
+Discofork also keeps an internal cache. If the upstream repository and a fork both have the same `pushedAt` snapshot as a previous run, Discofork reuses the stored facts and analysis instead of cloning, diffing, and prompting Codex again. Temporary clone directories are removed after each run, so the cache is what persists.
 
 If Codex fails, Discofork falls back to deterministic heuristic summaries so the run still completes.
 

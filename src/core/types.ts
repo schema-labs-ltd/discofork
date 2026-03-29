@@ -48,6 +48,8 @@ export type ForkMetadata = RepoMetadata & {
   defaultSelected: boolean
 }
 
+export type ForkSelectionStrategy = "stars" | "recent"
+
 export type DiscoveryResult = {
   upstream: RepoMetadata
   scannedForkCount: number
@@ -122,6 +124,8 @@ export type ForkAnalysis = {
   changeMagnitude: "minor" | "moderate" | "substantial" | "significant_divergence"
   likelyPurpose: string
   changeCategories: string[]
+  additionalFeatures: string[]
+  missingFeatures: string[]
   strengths: string[]
   risks: string[]
   idealUsers: string[]
@@ -169,6 +173,7 @@ export type AnalysisOptions = {
   includeArchived: boolean
   forkScanLimit: number
   recommendedForkLimit: number
+  compareConcurrency: number
   selectedForks?: string[]
   maxCommitSamples: number
   maxChangedFiles: number

@@ -1,4 +1,4 @@
-import type { DiffFacts, ForkAnalysis, ForkMetadata, RecommendationSummary } from "../core/types.ts"
+import type { DiffFacts, ForkAnalysis, ForkMetadata, ForkSelectionStrategy, RecommendationSummary } from "../core/types.ts"
 
 export function daysSince(isoTimestamp: string | null): number | null {
   if (!isoTimestamp) {
@@ -68,14 +68,50 @@ export function scoreForkCandidate(input: {
 export function recommendForks(
   forks: ForkMetadata[],
   limit: number,
+  strategy: ForkSelectionStrategy = "stars",
 ): Map<string, boolean> {
   return new Map(
     forks
       .slice()
-      .sort((left, right) => right.score - left.score)
+      .sort((left, right) => compareForksForSelection(left, right, strategy))
       .slice(0, limit)
       .map((fork) => [fork.fullName, true]),
   )
+}
+
+export function compareForksForSelection(
+  left: ForkMetadata,
+  right: ForkMetadata,
+  strategy: ForkSelectionStrategy,
+): number {
+  if (strategy === "recent") {
+    const leftDays = left.pushedDaysAgo ?? Number.POSITIVE_INFINITY
+    const rightDays = right.pushedDaysAgo ?? Number.POSITIVE_INFINITY
+
+    if (leftDays !== rightDays) {
+      return leftDays - rightDays
+    }
+
+    if (right.stargazerCount !== left.stargazerCount) {
+      return right.stargazerCount - left.stargazerCount
+    }
+  } else {
+    if (right.stargazerCount !== left.stargazerCount) {
+      return right.stargazerCount - left.stargazerCount
+    }
+
+    const leftDays = left.pushedDaysAgo ?? Number.POSITIVE_INFINITY
+    const rightDays = right.pushedDaysAgo ?? Number.POSITIVE_INFINITY
+    if (leftDays !== rightDays) {
+      return leftDays - rightDays
+    }
+  }
+
+  if (right.score !== left.score) {
+    return right.score - left.score
+  }
+
+  return left.fullName.localeCompare(right.fullName)
 }
 
 export function deriveMaintenanceLabel(pushedDaysAgo: number | null): ForkAnalysis["maintenance"] {

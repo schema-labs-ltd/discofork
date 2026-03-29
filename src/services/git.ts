@@ -88,6 +88,20 @@ export async function cloneOrUpdateRepository(
   )
 }
 
+export async function cleanupManagedRepositories(reposRoot: string, logger?: Logger): Promise<void> {
+  const exists = await stat(reposRoot)
+    .then((entry) => entry.isDirectory())
+    .catch(() => false)
+
+  if (!exists) {
+    return
+  }
+
+  await logger?.info("git_cleanup:start", { reposRoot })
+  await rm(reposRoot, { recursive: true, force: true })
+  await logger?.info("git_cleanup:finish", { reposRoot })
+}
+
 export async function ensureUpstreamRemote(
   directory: string,
   upstream: GitHubRepoRef,

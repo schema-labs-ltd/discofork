@@ -3,7 +3,7 @@ import { z } from "zod"
 import { AppError } from "../core/errors.ts"
 import type { DiscoveryResult, ForkMetadata, GitHubRepoRef, RepoMetadata } from "../core/types.ts"
 import type { Logger } from "../core/logger.ts"
-import { daysSince, recommendForks, scoreForkCandidate } from "./heuristics.ts"
+import { compareForksForSelection, daysSince, recommendForks, scoreForkCandidate } from "./heuristics.ts"
 import { runCommand } from "./command.ts"
 
 const repoViewSchema = z.object({
@@ -282,56 +282,101 @@ export async function discoverForks(
 ): Promise<DiscoveryResult> {
   const upstream = await fetchRepoMetadata(repo, logger)
   const scanLimit = Math.max(10, options.forkScanLimit)
-  const perPage = Math.min(100, scanLimit)
-  const collected = new Map<string, ForkMetadata>()
+  const perPage = Math.min(100, Math.max(20, Math.ceil(scanLimit / 2)))
+  const maxComparedForks = Math.min(Math.max(scanLimit * 4, 80), Math.max(scanLimit, upstream.forkCount))
+  const fetchSorts: Array<"stargazers" | "newest"> = upstream.forkCount <= scanLimit ? ["stargazers"] : ["stargazers", "newest"]
+  const nextPageBySort = new Map(fetchSorts.map((sort) => [sort, 1]))
+  const exhaustedSorts = new Set<"stargazers" | "newest">()
+  const seenForks = new Set<string>()
+  const visibleForksByName = new Map<string, ForkMetadata>()
+  let archivedExcluded = 0
+  let unchangedExcluded = 0
+  let comparedForkCount = 0
 
-  const addForks = (forks: ForkMetadata[]) => {
-    for (const fork of forks) {
-      if (!collected.has(fork.fullName)) {
-        collected.set(fork.fullName, fork)
+  while (
+    visibleForksByName.size < scanLimit &&
+    comparedForkCount < maxComparedForks &&
+    exhaustedSorts.size < fetchSorts.length
+  ) {
+    let fetchedAny = false
+
+    for (const sort of fetchSorts) {
+      if (visibleForksByName.size >= scanLimit || comparedForkCount >= maxComparedForks || exhaustedSorts.has(sort)) {
+        continue
+      }
+
+      const page = nextPageBySort.get(sort) ?? 1
+      const forkSlice = await fetchForkSlice(repo, sort, page, perPage, logger)
+      nextPageBySort.set(sort, page + 1)
+
+      if (forkSlice.length === 0) {
+        exhaustedSorts.add(sort)
+        continue
+      }
+
+      fetchedAny = true
+      if (forkSlice.length < perPage) {
+        exhaustedSorts.add(sort)
+      }
+
+      const freshForks = forkSlice.filter((fork) => {
+        if (fork.fullName === upstream.fullName || seenForks.has(fork.fullName)) {
+          return false
+        }
+
+        seenForks.add(fork.fullName)
+        return true
+      })
+
+      if (!options.includeArchived) {
+        archivedExcluded += freshForks.filter((fork) => fork.isArchived).length
+      }
+
+      const archiveFilteredForks = options.includeArchived
+        ? freshForks
+        : freshForks.filter((fork) => !fork.isArchived)
+      const remainingBudget = maxComparedForks - comparedForkCount
+      const comparisonBatch = archiveFilteredForks.slice(0, remainingBudget)
+
+      if (comparisonBatch.length === 0) {
+        continue
+      }
+
+      const comparedForks = await enrichForkComparisons(repo, upstream.defaultBranch, comparisonBatch, logger)
+      comparedForkCount += comparedForks.length
+
+      for (const fork of comparedForks) {
+        if (fork.hasChanges === false) {
+          unchangedExcluded += 1
+          continue
+        }
+
+        visibleForksByName.set(fork.fullName, fork)
       }
     }
-  }
 
-  if (upstream.forkCount <= scanLimit) {
-    addForks(await fetchForkSlice(repo, "newest", 1, perPage, logger))
-  } else {
-    const newestLimit = Math.max(10, Math.floor(scanLimit / 2))
-    const starLimit = Math.max(10, scanLimit - newestLimit)
-    addForks(await fetchForkSlice(repo, "newest", 1, newestLimit, logger))
-    addForks(await fetchForkSlice(repo, "stargazers", 1, starLimit, logger))
-  }
-
-  const initialForks = Array.from(collected.values()).filter((fork) => fork.fullName !== upstream.fullName)
-  const archivedExcluded = initialForks.filter((fork) => fork.isArchived).length
-  const archiveFilteredForks = options.includeArchived
-    ? initialForks
-    : initialForks.filter((fork) => !fork.isArchived)
-  const comparedForks = await enrichForkComparisons(repo, upstream.defaultBranch, archiveFilteredForks, logger)
-  const unchangedExcluded = comparedForks.filter((fork) => fork.hasChanges === false).length
-  const visibleForks = comparedForks.filter((fork) => fork.hasChanges !== false)
-
-  visibleForks.sort((left, right) => {
-    if (right.score !== left.score) {
-      return right.score - left.score
+    if (!fetchedAny) {
+      break
     }
+  }
 
-    return left.fullName.localeCompare(right.fullName)
-  })
+  const visibleForks = Array.from(visibleForksByName.values())
+    .sort((left, right) => compareForksForSelection(left, right, "stars"))
+    .slice(0, scanLimit)
 
-  const defaultSelection = recommendForks(visibleForks, options.recommendedForkLimit)
+  const defaultSelection = recommendForks(visibleForks, options.recommendedForkLimit, "stars")
   for (const fork of visibleForks) {
     fork.defaultSelected = defaultSelection.has(fork.fullName)
   }
 
   const selectionWarning =
-    upstream.forkCount > initialForks.length
-      ? `Scanned ${initialForks.length} of ${upstream.forkCount} forks. Expand the scan limit if you need broader coverage.`
+    upstream.forkCount > comparedForkCount || visibleForks.length < Math.min(scanLimit, upstream.forkCount)
+      ? `Checked ${comparedForkCount} forks to surface ${visibleForks.length} changed candidates. Expand the scan limit if you need broader coverage.`
       : null
 
   return {
     upstream,
-    scannedForkCount: initialForks.length,
+    scannedForkCount: comparedForkCount,
     totalForkCount: upstream.forkCount,
     archivedExcluded: options.includeArchived ? 0 : archivedExcluded,
     unchangedExcluded,

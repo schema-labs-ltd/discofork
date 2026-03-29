@@ -91,6 +91,8 @@ const report: FinalReport = {
         changeMagnitude: "minor",
         likelyPurpose: "Adds features",
         changeCategories: ["features"],
+        additionalFeatures: ["Adds plugin hooks"],
+        missingFeatures: [],
         strengths: ["Active"],
         risks: ["Small maintainer base"],
         idealUsers: ["Power users"],

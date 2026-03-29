@@ -91,6 +91,8 @@ const forkAnalysis: ForkAnalysis = {
   changeMagnitude: "minor",
   likelyPurpose: "Testing",
   changeCategories: ["features"],
+  additionalFeatures: ["Adds something"],
+  missingFeatures: [],
   strengths: ["strength"],
   risks: ["risk"],
   idealUsers: ["users"],
@@ -129,11 +131,117 @@ describe("cache", () => {
     }
     const newerFork = {
       ...fork,
-      updatedAt: "2026-03-30T11:00:00Z",
+      pushedAt: "2026-03-30T11:00:00Z",
     }
 
     expect(await loadUpstreamCache(upstreamPath, newerUpstream)).toBeNull()
     expect(await loadForkCache(forkPath, newerFork, upstream)).toBeNull()
     expect(await loadForkCache(forkPath, fork, newerUpstream)).toBeNull()
+  })
+
+  test("does not invalidate cache for updatedAt-only changes", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "discofork-cache-"))
+    const upstreamPath = path.join(tempDir, "upstream.json")
+    const forkPath = path.join(tempDir, "fork.json")
+
+    await saveUpstreamCache(upstreamPath, upstream, repoFacts, upstreamAnalysis)
+    await saveForkCache(forkPath, fork, upstream, diffFacts, forkAnalysis)
+
+    const updatedOnlyUpstream = {
+      ...upstream,
+      updatedAt: "2026-03-31T10:05:00Z",
+    }
+    const updatedOnlyFork = {
+      ...fork,
+      updatedAt: "2026-03-31T10:11:00Z",
+    }
+
+    expect(await loadUpstreamCache(upstreamPath, updatedOnlyUpstream)).not.toBeNull()
+    expect(await loadForkCache(forkPath, updatedOnlyFork, upstream)).not.toBeNull()
+    expect(await loadForkCache(forkPath, fork, updatedOnlyUpstream)).not.toBeNull()
+  })
+
+  test("invalidates legacy fork cache entries from the previous cache version", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "discofork-cache-"))
+    const forkPath = path.join(tempDir, "fork.json")
+
+    await Bun.write(
+      forkPath,
+      JSON.stringify({
+        version: 1,
+        cachedAt: "2026-03-29T15:00:00Z",
+        upstream: {
+          fullName: upstream.fullName,
+          defaultBranch: upstream.defaultBranch,
+          pushedAt: upstream.pushedAt,
+          updatedAt: upstream.updatedAt,
+        },
+        fork: {
+          fullName: fork.fullName,
+          defaultBranch: fork.defaultBranch,
+          pushedAt: fork.pushedAt,
+          updatedAt: fork.updatedAt,
+        },
+        diffFacts,
+        analysis: {
+          fork: "forks/repo",
+          maintenance: "active",
+          changeMagnitude: "minor",
+          likelyPurpose: "Testing",
+          changeCategories: ["features"],
+          strengths: ["strength"],
+          risks: ["risk"],
+          idealUsers: ["users"],
+          decisionSummary: "summary",
+          confidence: "medium",
+          evidence: ["e1", "e2"],
+        },
+      }),
+    )
+
+    expect(await loadForkCache(forkPath, fork, upstream)).toBeNull()
+  })
+
+  test("normalizes missing feature arrays in current-version fork cache entries", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "discofork-cache-"))
+    const forkPath = path.join(tempDir, "fork.json")
+
+    await Bun.write(
+      forkPath,
+      JSON.stringify({
+        version: 2,
+        cachedAt: "2026-03-29T15:00:00Z",
+        upstream: {
+          fullName: upstream.fullName,
+          defaultBranch: upstream.defaultBranch,
+          pushedAt: upstream.pushedAt,
+          updatedAt: upstream.updatedAt,
+        },
+        fork: {
+          fullName: fork.fullName,
+          defaultBranch: fork.defaultBranch,
+          pushedAt: fork.pushedAt,
+          updatedAt: fork.updatedAt,
+        },
+        diffFacts,
+        analysis: {
+          fork: "forks/repo",
+          maintenance: "active",
+          changeMagnitude: "minor",
+          likelyPurpose: "Testing",
+          changeCategories: ["features"],
+          strengths: ["strength"],
+          risks: ["risk"],
+          idealUsers: ["users"],
+          decisionSummary: "summary",
+          confidence: "medium",
+          evidence: ["e1", "e2"],
+        },
+      }),
+    )
+
+    const cachedFork = await loadForkCache(forkPath, fork, upstream)
+    expect(cachedFork?.analysis.additionalFeatures).toEqual([])
+    expect(cachedFork?.analysis.missingFeatures).toEqual([])
   })
 })

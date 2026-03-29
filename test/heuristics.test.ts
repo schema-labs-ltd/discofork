@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import type { DiffFacts, ForkAnalysis, ForkMetadata } from "../src/core/types.ts"
-import { computeRecommendations, deriveMagnitude, scoreForkCandidate } from "../src/services/heuristics.ts"
+import { compareForksForSelection, computeRecommendations, deriveMagnitude, recommendForks, scoreForkCandidate } from "../src/services/heuristics.ts"
 
 const baseFork: ForkMetadata = {
   fullName: "owner/fork",
@@ -48,6 +48,8 @@ const baseAnalysis: ForkAnalysis = {
   changeMagnitude: "minor",
   likelyPurpose: "Testing",
   changeCategories: ["features"],
+  additionalFeatures: ["Adds something"],
+  missingFeatures: [],
   strengths: ["A"],
   risks: ["B"],
   idealUsers: ["C"],
@@ -113,5 +115,43 @@ describe("heuristics", () => {
     expect(recommendations.bestMaintained).toBe("owner/opinionated")
     expect(recommendations.closestToUpstream).toBe("owner/fork")
     expect(recommendations.mostOpinionated).toBe("owner/opinionated")
+  })
+
+  test("prefers stars by default selection strategy", () => {
+    const starFork = {
+      ...baseFork,
+      fullName: "owner/starred",
+      stargazerCount: 80,
+      pushedDaysAgo: 20,
+    }
+    const recentFork = {
+      ...baseFork,
+      fullName: "owner/recent",
+      stargazerCount: 12,
+      pushedDaysAgo: 1,
+    }
+
+    const recommended = recommendForks([recentFork, starFork], 1, "stars")
+    expect(recommended.has("owner/starred")).toBe(true)
+    expect(compareForksForSelection(starFork, recentFork, "stars")).toBeLessThan(0)
+  })
+
+  test("can switch selection strategy to most recent forks", () => {
+    const starFork = {
+      ...baseFork,
+      fullName: "owner/starred",
+      stargazerCount: 80,
+      pushedDaysAgo: 20,
+    }
+    const recentFork = {
+      ...baseFork,
+      fullName: "owner/recent",
+      stargazerCount: 12,
+      pushedDaysAgo: 1,
+    }
+
+    const recommended = recommendForks([starFork, recentFork], 1, "recent")
+    expect(recommended.has("owner/recent")).toBe(true)
+    expect(compareForksForSelection(recentFork, starFork, "recent")).toBeLessThan(0)
   })
 })
