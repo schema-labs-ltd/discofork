@@ -215,6 +215,51 @@ Discofork also keeps an internal cache. If the upstream repository and a fork bo
 
 If Codex fails, Discofork falls back to deterministic heuristic summaries so the run still completes.
 
+## Web backend
+
+The website now has a real backend shape:
+
+- `GET /api/repo/:owner/:repo` is the backend boundary for repo lookup
+- the backend checks Postgres for a cached report first
+- if no cached report exists, it writes or refreshes a queued row in Postgres
+- it then enqueues the repo in Redis with dedupe, so the same repo is not queued repeatedly
+- the frontend route fetches that backend endpoint instead of touching Postgres or Redis directly
+
+If `DATABASE_URL` and `REDIS_URL` are not set for the web app, it falls back to the existing mock/demo data.
+
+## Worker
+
+A separate worker process now exists for backend processing:
+
+```bash
+bun run worker
+```
+
+The worker:
+
+- watches the Redis queue for repo jobs
+- runs Discofork discovery and analysis for the queued repo
+- stores the final report JSON in Postgres
+- marks failures in Postgres so the web backend can surface queued vs failed vs ready state
+
+Important environment variables for the worker:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `DISCOFORK_FORK_SCAN_LIMIT` optional, defaults to `25`
+- `DISCOFORK_RECOMMENDED_FORK_LIMIT` optional, defaults to `6`
+- `DISCOFORK_COMPARE_CONCURRENCY` optional, defaults to `3`
+
+## Migrations
+
+Run database migrations with:
+
+```bash
+bun run migrate
+```
+
+Migrations live in [`migrations/`](/home/ec2-user/development/personal/discofork/migrations).
+
 ## Development
 
 Run checks:
@@ -258,6 +303,18 @@ Once those exist, connect them to the web service with environment variables suc
 
 - `DATABASE_URL`
 - `REDIS_URL`
+
+For the worker, create a separate service from the repo root and run:
+
+```bash
+bun run worker
+```
+
+Before first use, run the root migration command once against the target Postgres database:
+
+```bash
+bun run migrate
+```
 
 ## Example output
 

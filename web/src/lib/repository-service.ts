@@ -1,3 +1,7 @@
+import { databaseConfigured } from "./server/database"
+import { enqueueRepoJob, queueConfigured } from "./server/queue"
+import { getRepoRecord, touchQueuedRepo, type StoredReportRecord } from "./server/reports"
+
 export type RepoRecommendationSet = {
   bestMaintained: string
   closestToUpstream: string
@@ -250,6 +254,27 @@ const mockCache = new Map<string, CachedRepoView>([
 export async function resolveRepositoryView(owner: string, repo: string): Promise<RepoView> {
   const fullName = `${owner}/${repo}`
 
+  if (databaseConfigured() && queueConfigured()) {
+    const record = await getRepoRecord(fullName)
+
+    if (record?.status === "ready" && record.report_json) {
+      return mapStoredReportToView(record)
+    }
+
+    await touchQueuedRepo(owner, repo)
+    await enqueueRepoJob(fullName)
+
+    return {
+      kind: "queued",
+      owner,
+      repo,
+      fullName,
+      githubUrl: `https://github.com/${fullName}`,
+      queuedAt: record?.queued_at ?? new Date().toISOString(),
+      queueHint: queueHintForStatus(record?.status),
+    }
+  }
+
   const cached = mockCache.get(fullName)
   if (cached) {
     return cached
@@ -262,6 +287,91 @@ export async function resolveRepositoryView(owner: string, repo: string): Promis
     fullName,
     githubUrl: `https://github.com/${fullName}`,
     queuedAt: new Date().toISOString(),
-    queueHint: "No cached analysis was found. This repo would be queued for Discofork processing and shown here once the backend finishes the first run.",
+    queueHint: "No cached analysis was found. Configure DATABASE_URL and REDIS_URL to enable real queueing and cached repo views.",
+  }
+}
+
+function queueHintForStatus(status: StoredReportRecord["status"] | undefined): string {
+  switch (status) {
+    case "processing":
+      return "This repository is currently being analyzed by Discofork."
+    case "failed":
+      return "The last analysis failed. The repository has been requeued for another run."
+    case "queued":
+      return "This repository has been queued for Discofork analysis."
+    default:
+      return "No cached data exists yet. This repository has been queued for Discofork analysis."
+  }
+}
+
+function mapStoredReportToView(record: StoredReportRecord): CachedRepoView {
+  const report = record.report_json as {
+    generatedAt?: string
+    upstream?: {
+      metadata?: {
+        stargazerCount?: number
+        forkCount?: number
+        defaultBranch?: string
+        pushedAt?: string | null
+      }
+      analysis?: { summary?: string }
+    }
+    recommendations?: {
+      bestMaintained?: string | null
+      closestToUpstream?: string | null
+      mostFeatureRich?: string | null
+      mostOpinionated?: string | null
+    }
+    forks?: Array<{
+      metadata?: { fullName?: string }
+      analysis?: {
+        maintenance?: string
+        changeMagnitude?: string
+        decisionSummary?: string
+        likelyPurpose?: string
+        idealUsers?: string[]
+        additionalFeatures?: string[]
+        missingFeatures?: string[]
+        strengths?: string[]
+        risks?: string[]
+      }
+    }>
+  }
+
+  const upstreamMetadata = report.upstream?.metadata ?? {}
+  const recommendations = report.recommendations ?? {}
+
+  return {
+    kind: "cached",
+    owner: record.owner,
+    repo: record.repo,
+    fullName: record.full_name,
+    githubUrl: record.github_url,
+    cachedAt: record.cached_at ?? report.generatedAt ?? record.updated_at,
+    stats: {
+      stars: upstreamMetadata.stargazerCount ?? 0,
+      forks: upstreamMetadata.forkCount ?? 0,
+      defaultBranch: upstreamMetadata.defaultBranch ?? "main",
+      lastPushedAt: upstreamMetadata.pushedAt ?? "unknown",
+    },
+    upstreamSummary: report.upstream?.analysis?.summary ?? "No upstream summary available.",
+    recommendations: {
+      bestMaintained: recommendations.bestMaintained ?? "None",
+      closestToUpstream: recommendations.closestToUpstream ?? "None",
+      mostFeatureRich: recommendations.mostFeatureRich ?? "None",
+      mostOpinionated: recommendations.mostOpinionated ?? "None",
+    },
+    forks: (report.forks ?? []).map((fork) => ({
+      fullName: fork.metadata?.fullName ?? "unknown/unknown",
+      maintenance: fork.analysis?.maintenance ?? "unknown",
+      changeMagnitude: fork.analysis?.changeMagnitude ?? "unknown",
+      summary: fork.analysis?.decisionSummary ?? "No summary available.",
+      likelyPurpose: fork.analysis?.likelyPurpose ?? "No likely purpose recorded.",
+      bestFor: (fork.analysis?.idealUsers ?? []).join("; ") || "No ideal-user guidance recorded.",
+      additionalFeatures: fork.analysis?.additionalFeatures ?? [],
+      missingFeatures: fork.analysis?.missingFeatures ?? [],
+      strengths: fork.analysis?.strengths ?? [],
+      risks: fork.analysis?.risks ?? [],
+    })),
   }
 }

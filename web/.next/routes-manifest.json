@@ -20,6 +20,15 @@
   },
   "dynamicRoutes": [
     {
+      "page": "/api/repo/[owner]/[repo]",
+      "regex": "^/api/repo/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPowner": "nxtPowner",
+        "nxtPrepo": "nxtPrepo"
+      },
+      "namedRegex": "^/api/repo/(?<nxtPowner>[^/]+?)/(?<nxtPrepo>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/[owner]/[repo]",
       "regex": "^/([^/]+?)/([^/]+?)(?:/)?$",
       "routeKeys": {

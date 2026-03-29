@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 import { CachedRepositoryBrief, QueuedRepositoryBrief } from "@/components/repository-brief"
 import { RepoShell } from "@/components/repo-shell"
-import { resolveRepositoryView } from "@/lib/repository-service"
+import { fetchRepositoryView } from "@/lib/repository-api"
 
 type RepoPageProps = {
   params: Promise<{
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: RepoPageProps): Promise<Metad
 
 export default async function RepositoryPage({ params }: RepoPageProps) {
   const { owner, repo } = await params
-  const view = await resolveRepositoryView(owner, repo)
+  const view = await fetchRepositoryView(owner, repo)
 
   return (
     <RepoShell

@@ -1,0 +1,49 @@
+import { createClient, type RedisClientType } from "redis"
+
+import { REPO_QUEUE_DEDUPE_PREFIX, REPO_QUEUE_DEDUPE_TTL_SECONDS, REPO_QUEUE_KEY } from "./constants"
+
+let client: RedisClientType | null = null
+
+export function queueConfigured(): boolean {
+  return Boolean(process.env.REDIS_URL)
+}
+
+async function getRedisClient(): Promise<RedisClientType> {
+  if (!process.env.REDIS_URL) {
+    throw new Error("REDIS_URL is required.")
+  }
+
+  if (!client) {
+    client = createClient({
+      url: process.env.REDIS_URL,
+    })
+    client.on("error", (error) => {
+      console.error("Redis error:", error)
+    })
+  }
+
+  if (!client.isOpen) {
+    await client.connect()
+  }
+
+  return client
+}
+
+function queueDedupeKey(fullName: string): string {
+  return `${REPO_QUEUE_DEDUPE_PREFIX}${fullName}`
+}
+
+export async function enqueueRepoJob(fullName: string): Promise<boolean> {
+  const redis = await getRedisClient()
+  const queued = await redis.set(queueDedupeKey(fullName), "1", {
+    NX: true,
+    EX: REPO_QUEUE_DEDUPE_TTL_SECONDS,
+  })
+
+  if (!queued) {
+    return false
+  }
+
+  await redis.lPush(REPO_QUEUE_KEY, fullName)
+  return true
+}

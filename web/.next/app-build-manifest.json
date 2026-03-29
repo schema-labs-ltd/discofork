@@ -15,13 +15,20 @@
       "static/css/40331c1726f90413.css",
       "static/chunks/app/layout-697983d2b5e4f0c7.js"
     ],
+    "/api/repo/[owner]/[repo]/route": [
+      "static/chunks/webpack-305d99588bad0856.js",
+      "static/chunks/4bd1b696-8b20f5740c9f0351.js",
+      "static/chunks/255-39d27bc9ae99e536.js",
+      "static/chunks/main-app-c3acdb403e42a0fb.js",
+      "static/chunks/app/api/repo/[owner]/[repo]/route-543f18afe972582e.js"
+    ],
     "/[owner]/[repo]/page": [
       "static/chunks/webpack-305d99588bad0856.js",
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
       "static/chunks/255-39d27bc9ae99e536.js",
       "static/chunks/main-app-c3acdb403e42a0fb.js",
       "static/chunks/375-3ab3f45d943991c3.js",
-      "static/chunks/app/[owner]/[repo]/page-8c403825c3217072.js"
+      "static/chunks/app/[owner]/[repo]/page-9ce99f04173caf7c.js"
     ],
     "/page": [
       "static/chunks/webpack-305d99588bad0856.js",

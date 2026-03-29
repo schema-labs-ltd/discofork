@@ -1,5 +1,6 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/repo/[owner]/[repo]/route": "app/api/repo/[owner]/[repo]/route.js",
   "/[owner]/[repo]/page": "app/[owner]/[repo]/page.js",
   "/page": "app/page.js"
 }

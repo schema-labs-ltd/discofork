@@ -78,9 +78,9 @@ export function QueuedRepositoryBrief({ view }: { view: QueuedRepoView }) {
         <div className="mt-8 space-y-3">
           <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">What happens next</div>
           <ul className="space-y-3 text-sm leading-7 text-muted-foreground">
-            <li>The backend will eventually enqueue this repo in Redis.</li>
-            <li>Discofork will run the local analysis pipeline and save the result in Postgres.</li>
-            <li>This route will switch from queued state to a cached repo brief once that data exists.</li>
+            <li>The web backend has queued this repo in Redis if it was not already pending.</li>
+            <li>The Discofork worker will run the analysis pipeline and save the result in Postgres.</li>
+            <li>This route will switch from queued state to a cached repo brief once the stored report is ready.</li>
           </ul>
         </div>
       </aside>
