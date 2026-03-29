@@ -11,17 +11,18 @@ export function RepoShell({
   title,
   description,
   children,
+  compact = false,
 }: {
   eyebrow: string
   title: string
   description: string
   children: ReactNode
+  compact?: boolean
 }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(94,234,212,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(96,165,250,0.12),_transparent_30%),linear-gradient(180deg,_rgba(255,255,255,0.03),_transparent_35%)]" />
-      <header className="border-b border-white/10">
-        <div className="container flex items-center justify-between py-5">
+      <header className="border-b border-border bg-white">
+        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-6 py-4 lg:px-8">
           <Link href="/" className="transition-opacity hover:opacity-80">
             <Wordmark />
           </Link>
@@ -29,20 +30,24 @@ export function RepoShell({
             href="https://github.com/vultuk/discofork"
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ variant: "ghost" }), "gap-2 rounded-full text-muted-foreground")}
+            className={cn(buttonVariants({ variant: "ghost" }), "gap-2 text-slate-600")}
           >
             GitHub <ArrowUpRight className="h-4 w-4" />
           </a>
         </div>
       </header>
 
-      <main className="container py-14 md:py-20">
-        <div className="max-w-3xl space-y-5">
+      <main className={cn("mx-auto w-full max-w-[1800px] px-6 lg:px-8", compact ? "py-6" : "py-14 md:py-20")}>
+        <div className={cn(compact ? "space-y-2 border-b border-border pb-4" : "max-w-3xl space-y-4")}>
           <div className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">{eyebrow}</div>
-          <h1 className="max-w-4xl text-balance text-4xl font-semibold tracking-tight md:text-6xl">{title}</h1>
-          <p className="max-w-2xl text-pretty text-base leading-7 text-muted-foreground md:text-lg">{description}</p>
+          <h1 className={cn("font-semibold tracking-tight text-slate-950", compact ? "text-[1.4rem]" : "max-w-4xl text-balance text-[2.5rem] md:text-[3.25rem]")}>
+            {title}
+          </h1>
+          <p className={cn("text-muted-foreground", compact ? "max-w-none text-sm leading-6" : "max-w-2xl text-pretty text-base leading-7 md:text-lg")}>
+            {description}
+          </p>
         </div>
-        <div className="mt-14 animate-fade-up">{children}</div>
+        <div className={cn(compact ? "mt-6" : "mt-14 animate-fade-up")}>{children}</div>
       </main>
     </div>
   )

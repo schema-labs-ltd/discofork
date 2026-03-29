@@ -13,56 +13,62 @@ function SectionList({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="space-y-3">
       <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{title}</div>
-      <ul className="space-y-2 text-sm leading-7 text-slate-200">
+      <ul className="list-disc space-y-1 pl-5 text-sm leading-7 text-slate-700">
         {items.map((item) => (
-          <li key={item} className="flex gap-3">
-            <span className="mt-[10px] h-1.5 w-1.5 rounded-full bg-primary/80" />
-            <span>{item}</span>
-          </li>
+          <li key={item}>{item}</li>
         ))}
       </ul>
     </section>
   )
 }
 
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-medium text-slate-900">{value}</span>
+    </div>
+  )
+}
+
 export function QueuedRepositoryBrief({ view }: { view: QueuedRepoView }) {
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-      <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_360px]">
+      <div className="rounded-md border border-border bg-white p-6">
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="warning">Queued lookup</Badge>
           <Badge variant="muted">queued {view.queuedAt}</Badge>
         </div>
 
         <div className="mt-6 space-y-4">
-          <h2 className="text-2xl font-semibold tracking-tight">No cached brief yet</h2>
-          <p className="max-w-3xl text-base leading-8 text-slate-200">{view.queueHint}</p>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">No cached brief yet</h2>
+          <p className="max-w-3xl text-[15px] leading-7 text-slate-700">{view.queueHint}</p>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-[1.1rem] border border-white/8 bg-black/20 p-4">
+          <div className="rounded-md border border-border bg-slate-50 p-4">
             <Radar className="h-5 w-5 text-primary" />
-            <div className="mt-3 text-sm font-medium">Lookup requested</div>
+            <div className="mt-3 text-sm font-medium text-slate-900">Lookup requested</div>
           </div>
-          <div className="rounded-[1.1rem] border border-white/8 bg-black/20 p-4">
+          <div className="rounded-md border border-border bg-slate-50 p-4">
             <Database className="h-5 w-5 text-primary" />
-            <div className="mt-3 text-sm font-medium">Database miss</div>
+            <div className="mt-3 text-sm font-medium text-slate-900">Database miss</div>
           </div>
-          <div className="rounded-[1.1rem] border border-white/8 bg-black/20 p-4">
+          <div className="rounded-md border border-border bg-slate-50 p-4">
             <Clock3 className="h-5 w-5 text-primary" />
-            <div className="mt-3 text-sm font-medium">Awaiting backend run</div>
+            <div className="mt-3 text-sm font-medium text-slate-900">Awaiting backend run</div>
           </div>
         </div>
       </div>
 
-      <aside className="rounded-[1.4rem] border border-white/10 bg-white/[0.02] p-6">
+      <aside className="rounded-md border border-border bg-white p-6">
         <div className="space-y-3">
           <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Repository source</div>
           <a
             href={view.githubUrl}
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ variant: "outline" }), "w-full justify-between rounded-[1rem] px-5 py-6")}
+            className={cn(buttonVariants({ variant: "outline" }), "w-full justify-between rounded-md px-5 py-6")}
           >
             Open on GitHub
             <ArrowUpRight className="h-4 w-4" />
@@ -87,9 +93,9 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
   const selectedFork = view.forks.find((fork) => fork.fullName === selectedForkName) ?? view.forks[0]
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-6">
-        <div className="rounded-[1.45rem] border border-white/10 bg-white/[0.035] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.2)]">
+        <div className="rounded-md border border-border bg-white p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -97,8 +103,8 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
                 <Badge variant="muted">cached {view.cachedAt}</Badge>
               </div>
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-50">{view.fullName}</h2>
-                <p className="mt-3 max-w-3xl text-base leading-8 text-slate-200">{view.upstreamSummary}</p>
+                <h2 className="text-lg font-semibold tracking-tight text-slate-950">{view.fullName}</h2>
+                <p className="mt-3 max-w-[110ch] text-[14px] leading-7 text-slate-700">{view.upstreamSummary}</p>
               </div>
             </div>
 
@@ -106,68 +112,38 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
               href={view.githubUrl}
               target="_blank"
               rel="noreferrer"
-              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-full px-4")}
+              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-4")}
             >
               GitHub
               <ArrowUpRight className="h-4 w-4" />
             </a>
           </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-[1rem] border border-white/8 bg-black/20 p-4">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                <Star className="h-3.5 w-3.5" />
-                Stars
-              </div>
-              <div className="mt-3 text-2xl font-semibold">{view.stats.stars.toLocaleString()}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-black/20 p-4">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                <GitFork className="h-3.5 w-3.5" />
-                Forks
-              </div>
-              <div className="mt-3 text-2xl font-semibold">{view.stats.forks.toLocaleString()}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Default branch</div>
-              <div className="mt-3 text-2xl font-semibold">{view.stats.defaultBranch}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Last pushed</div>
-              <div className="mt-3 text-2xl font-semibold">{view.stats.lastPushedAt}</div>
-            </div>
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-4">
+            <MetaItem label="Stars" value={view.stats.stars.toLocaleString()} />
+            <MetaItem label="Forks" value={view.stats.forks.toLocaleString()} />
+            <MetaItem label="Default branch" value={view.stats.defaultBranch} />
+            <MetaItem label="Last pushed" value={view.stats.lastPushedAt} />
           </div>
 
-          <div className="mt-8 grid gap-3 md:grid-cols-2">
-            <div className="rounded-[1rem] border border-white/8 bg-white/[0.02] p-4">
-              <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Best maintained</div>
-              <div className="mt-2 text-base font-medium text-slate-100">{view.recommendations.bestMaintained}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-white/[0.02] p-4">
-              <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Closest to upstream</div>
-              <div className="mt-2 text-base font-medium text-slate-100">{view.recommendations.closestToUpstream}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-white/[0.02] p-4">
-              <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Most feature-rich</div>
-              <div className="mt-2 text-base font-medium text-slate-100">{view.recommendations.mostFeatureRich}</div>
-            </div>
-            <div className="rounded-[1rem] border border-white/8 bg-white/[0.02] p-4">
-              <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Most opinionated</div>
-              <div className="mt-2 text-base font-medium text-slate-100">{view.recommendations.mostOpinionated}</div>
-            </div>
+          <div className="mt-6 grid gap-x-8 gap-y-3 border-t border-border pt-4 md:grid-cols-2">
+            <MetaItem label="Best maintained" value={view.recommendations.bestMaintained} />
+            <MetaItem label="Closest to upstream" value={view.recommendations.closestToUpstream} />
+            <MetaItem label="Most feature-rich" value={view.recommendations.mostFeatureRich} />
+            <MetaItem label="Most opinionated" value={view.recommendations.mostOpinionated} />
           </div>
         </div>
 
-        <div className="rounded-[1.45rem] border border-white/10 bg-white/[0.025] p-6">
+        <div className="rounded-md border border-border bg-white p-6">
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Forks</div>
-              <h3 className="mt-2 text-xl font-semibold tracking-tight">Choose a fork to inspect</h3>
+              <h3 className="mt-2 text-base font-semibold tracking-tight text-slate-950">Choose a fork to inspect</h3>
             </div>
-            <div className="text-sm text-muted-foreground">{view.forks.length} cached fork briefs</div>
+            <div className="text-xs text-muted-foreground">{view.forks.length} cached fork briefs</div>
           </div>
 
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 overflow-hidden rounded-md border border-border">
             {view.forks.map((fork) => {
               const active = fork.fullName === selectedFork?.fullName
 
@@ -177,23 +153,23 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
                   type="button"
                   onClick={() => setSelectedForkName(fork.fullName)}
                   className={cn(
-                    "w-full rounded-[1rem] border px-4 py-4 text-left transition-colors",
+                    "w-full border-b px-4 py-3 text-left transition-colors last:border-b-0",
                     active
-                      ? "border-primary/40 bg-primary/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-                      : "border-white/8 bg-black/15 hover:border-white/16 hover:bg-white/[0.035]",
+                      ? "border-l-2 border-l-primary border-r-0 border-t-0 border-b border-border bg-blue-50/60"
+                      : "border-l-2 border-l-transparent border-r-0 border-t-0 border-b border-border bg-white hover:bg-slate-50",
                   )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-base font-medium text-slate-100">{fork.fullName}</div>
+                      <div className="text-sm font-medium text-slate-950">{fork.fullName}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <Badge variant={fork.maintenance === "active" ? "success" : "muted"}>{fork.maintenance}</Badge>
                         <Badge variant="muted">{fork.changeMagnitude}</Badge>
                       </div>
                     </div>
-                    {active ? <Badge>Selected</Badge> : null}
+                    {active ? <span className="text-xs font-medium text-primary">Selected</span> : null}
                   </div>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{fork.summary}</p>
+                  <p className="mt-2 max-w-[100ch] text-sm leading-6 text-slate-600">{fork.summary}</p>
                 </button>
               )
             })}
@@ -201,27 +177,27 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
         </div>
       </div>
 
-      <aside className="rounded-[1.45rem] border border-white/10 bg-white/[0.025] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.16)]">
+      <aside className="rounded-md border border-border bg-white p-6">
         {selectedFork ? (
           <div className="space-y-8">
             <div className="space-y-4">
               <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Fork comparison</div>
               <div className="space-y-3">
-                <h3 className="text-2xl font-semibold tracking-tight text-slate-50">{selectedFork.fullName}</h3>
+                <h3 className="text-lg font-semibold tracking-tight text-slate-950">{selectedFork.fullName}</h3>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant={selectedFork.maintenance === "active" ? "success" : "muted"}>{selectedFork.maintenance}</Badge>
                   <Badge variant="muted">{selectedFork.changeMagnitude}</Badge>
                 </div>
-                <p className="text-base leading-8 text-slate-200">{selectedFork.summary}</p>
+                <p className="text-[15px] leading-7 text-slate-700">{selectedFork.summary}</p>
               </div>
             </div>
 
-            <section className="space-y-4 rounded-[1rem] border border-white/8 bg-black/20 p-5">
+            <section className="space-y-4 rounded-md border border-border bg-slate-50 p-5">
               <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Likely purpose</div>
-              <p className="text-sm leading-7 text-slate-200">{selectedFork.likelyPurpose}</p>
+              <p className="text-sm leading-7 text-slate-700">{selectedFork.likelyPurpose}</p>
               <div className="pt-1">
                 <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Best for</div>
-                <p className="mt-2 text-sm leading-7 text-slate-200">{selectedFork.bestFor}</p>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{selectedFork.bestFor}</p>
               </div>
             </section>
 

@@ -32,6 +32,7 @@ export default async function RepositoryPage({ params }: RepoPageProps) {
           ? "Read the upstream summary on the left, browse the cached forks below it, and load each fork comparison into the right-hand panel."
           : "This repository does not have cached Discofork data yet, so the web app shows the queued state until backend processing exists."
       }
+      compact
     >
       {view.kind === "cached" ? <CachedRepositoryBrief view={view} /> : <QueuedRepositoryBrief view={view} />}
     </RepoShell>
