@@ -2,17 +2,19 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowRight, Database, GitFork, HardDriveDownload, LoaderCircle, Star } from "lucide-react"
 
+import { RepoOrderSelect } from "@/components/repo-order-select"
 import { RequeueFailedButton } from "@/components/requeue-failed-button"
 import { RepoShell } from "@/components/repo-shell"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { fetchRepositoryList } from "@/lib/repository-list-api"
-import type { RepoListItem } from "@/lib/repository-list"
+import type { RepoListItem, RepoListOrder } from "@/lib/repository-list"
 import { cn } from "@/lib/utils"
 
 type RepoIndexPageProps = {
   searchParams?: Promise<{
     page?: string
+    order?: string
   }>
 }
 
@@ -24,6 +26,16 @@ export const metadata: Metadata = {
 function parsePage(rawValue: string | undefined): number {
   const parsed = Number.parseInt(rawValue ?? "1", 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
+function parseOrder(rawValue: string | undefined): RepoListOrder {
+  switch (rawValue) {
+    case "forks":
+    case "stars":
+      return rawValue
+    default:
+      return "updated"
+  }
 }
 
 function formatDate(value: string | null): string {
@@ -70,8 +82,15 @@ function formatPercent(value: number): string {
 export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
   const resolvedSearchParams = await searchParams
   const page = parsePage(resolvedSearchParams?.page)
-  const view = await fetchRepositoryList(page)
+  const order = parseOrder(resolvedSearchParams?.order)
+  const view = await fetchRepositoryList(page, order)
   const cachedCoverage = view.stats.total === 0 ? 0 : (view.stats.cached / view.stats.total) * 100
+  const previousHref = view.hasPrevious
+    ? `/repos?page=${view.page - 1}&order=${view.order}`
+    : `/repos?order=${view.order}`
+  const nextHref = view.hasNext
+    ? `/repos?page=${view.page + 1}&order=${view.order}`
+    : `/repos?page=${view.page}&order=${view.order}`
 
   return (
     <RepoShell
@@ -134,9 +153,10 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
+            <RepoOrderSelect value={view.order} />
             <RequeueFailedButton failedCount={view.stats.failed} queueEnabled={view.queueEnabled} />
             <Link
-              href={view.hasPrevious ? `/repos?page=${view.page - 1}` : "/repos"}
+              href={previousHref}
               aria-disabled={!view.hasPrevious}
               className={cn(
                 buttonVariants({ variant: "outline" }),
@@ -147,7 +167,7 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
               Previous
             </Link>
             <Link
-              href={view.hasNext ? `/repos?page=${view.page + 1}` : `/repos?page=${view.page}`}
+              href={nextHref}
               aria-disabled={!view.hasNext}
               className={cn(
                 buttonVariants({ variant: "outline" }),

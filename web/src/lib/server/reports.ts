@@ -1,3 +1,4 @@
+import type { RepoListOrder } from "../repository-list"
 import { query } from "./database"
 
 export type StoredReportRecord = {
@@ -104,10 +105,17 @@ export async function touchQueuedRepo(owner: string, repo: string, queuedNow: bo
 export async function listRepoRecords(
   page: number,
   pageSize: number,
+  order: RepoListOrder,
 ): Promise<{ items: StoredRepoListRecord[]; stats: RepoListStatsRecord }> {
   const safePage = Math.max(1, page)
   const safePageSize = Math.max(1, pageSize)
   const offset = (safePage - 1) * safePageSize
+  const orderByClause =
+    order === "forks"
+      ? "coalesce(nullif(report_json->'upstream'->'metadata'->>'forkCount', '')::int, -1) desc, updated_at desc, full_name asc"
+      : order === "stars"
+        ? "coalesce(nullif(report_json->'upstream'->'metadata'->>'stargazerCount', '')::int, -1) desc, updated_at desc, full_name asc"
+        : "updated_at desc, full_name asc"
 
   const statRows = await query<RepoListStatsRecord>(
     `select
@@ -146,7 +154,7 @@ export async function listRepoRecords(
       report_json->'upstream'->'analysis'->>'summary' as upstream_summary,
       coalesce(jsonb_array_length(coalesce(report_json->'forks', '[]'::jsonb)), 0) as fork_brief_count
     from repo_reports
-    order by coalesce(cached_at, queued_at, updated_at) desc, full_name asc
+    order by ${orderByClause}
     limit $1
     offset $2`,
     [safePageSize, offset],

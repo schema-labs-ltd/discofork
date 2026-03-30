@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { REPO_LIST_PAGE_SIZE, type RepoListView } from "@/lib/repository-list"
+import { REPO_LIST_ORDER_VALUES, REPO_LIST_PAGE_SIZE, type RepoListOrder, type RepoListView } from "@/lib/repository-list"
 import { databaseConfigured } from "@/lib/server/database"
 import { queueConfigured } from "@/lib/server/queue"
 import { listRepoRecords } from "@/lib/server/reports"
@@ -10,8 +10,15 @@ function parsePage(rawValue: string | null): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
 }
 
+function parseOrder(rawValue: string | null): RepoListOrder {
+  return REPO_LIST_ORDER_VALUES.includes((rawValue ?? "") as RepoListOrder)
+    ? ((rawValue ?? "updated") as RepoListOrder)
+    : "updated"
+}
+
 export async function GET(request: NextRequest) {
   const page = parsePage(request.nextUrl.searchParams.get("page"))
+  const order = parseOrder(request.nextUrl.searchParams.get("order"))
 
   if (!databaseConfigured()) {
     const payload: RepoListView = {
@@ -24,6 +31,7 @@ export async function GET(request: NextRequest) {
         cached: 0,
         failed: 0,
       },
+      order,
       page,
       pageSize: REPO_LIST_PAGE_SIZE,
       total: 0,
@@ -37,7 +45,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload)
   }
 
-  const { items, stats } = await listRepoRecords(page, REPO_LIST_PAGE_SIZE)
+  const { items, stats } = await listRepoRecords(page, REPO_LIST_PAGE_SIZE, order)
   const totalPages = stats.total === 0 ? 0 : Math.ceil(stats.total / REPO_LIST_PAGE_SIZE)
 
   const payload: RepoListView = {
@@ -59,6 +67,7 @@ export async function GET(request: NextRequest) {
       forkBriefCount: item.fork_brief_count,
     })),
     stats,
+    order,
     page,
     pageSize: REPO_LIST_PAGE_SIZE,
     total: stats.total,

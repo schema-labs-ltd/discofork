@@ -1,8 +1,8 @@
 import { headers } from "next/headers"
 
-import type { RepoListView } from "./repository-list"
+import type { RepoListOrder, RepoListView } from "./repository-list"
 
-export async function fetchRepositoryList(page: number): Promise<RepoListView> {
+export async function fetchRepositoryList(page: number, order: RepoListOrder): Promise<RepoListView> {
   const headerStore = await headers()
   const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host")
   const proto = headerStore.get("x-forwarded-proto") ?? "http"
@@ -11,7 +11,7 @@ export async function fetchRepositoryList(page: number): Promise<RepoListView> {
     throw new Error("Could not determine request host for repository index lookup.")
   }
 
-  const response = await fetch(`${proto}://${host}/api/repos?page=${page}`, {
+  const response = await fetch(`${proto}://${host}/api/repos?page=${page}&order=${order}`, {
     cache: "no-store",
   })
 

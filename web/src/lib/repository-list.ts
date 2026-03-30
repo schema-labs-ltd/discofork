@@ -1,5 +1,9 @@
 export const REPO_LIST_PAGE_SIZE = 25
 
+export const REPO_LIST_ORDER_VALUES = ["updated", "forks", "stars"] as const
+
+export type RepoListOrder = (typeof REPO_LIST_ORDER_VALUES)[number]
+
 export type RepoListItem = {
   fullName: string
   owner: string
@@ -30,6 +34,7 @@ export type RepoListStats = {
 export type RepoListView = {
   items: RepoListItem[]
   stats: RepoListStats
+  order: RepoListOrder
   page: number
   pageSize: number
   total: number
