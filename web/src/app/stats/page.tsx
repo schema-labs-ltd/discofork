@@ -71,6 +71,21 @@ function MultiBarChart({
   series: RepoDailyStatsPoint[]
 }) {
   const maxValue = Math.max(1, ...series.flatMap((point) => [point.added, point.cached]))
+  const width = 720
+  const height = 240
+  const padding = { top: 16, right: 16, bottom: 28, left: 20 }
+  const innerWidth = width - padding.left - padding.right
+  const innerHeight = height - padding.top - padding.bottom
+  const xStep = series.length > 1 ? innerWidth / (series.length - 1) : 0
+  const toX = (index: number) => padding.left + index * xStep
+  const toY = (value: number) => padding.top + innerHeight - (value / maxValue) * innerHeight
+  const buildPath = (selector: (point: RepoDailyStatsPoint) => number) =>
+    series
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${toX(index)} ${toY(selector(point))}`)
+      .join(" ")
+  const addedPath = buildPath((point) => point.added)
+  const cachedPath = buildPath((point) => point.cached)
+  const tickIndexes = Array.from(new Set([0, Math.floor((series.length - 1) / 2), series.length - 1])).filter((index) => index >= 0)
 
   return (
     <section className="rounded-xl border border-border bg-white p-6">
@@ -91,24 +106,36 @@ function MultiBarChart({
         </span>
       </div>
 
-      <div className="mt-6 grid grid-cols-10 gap-3 md:grid-cols-15 xl:grid-cols-30">
-        {series.map((point) => (
-          <div key={point.date} className="space-y-3">
-            <div className="flex h-44 items-end justify-center gap-1 rounded-lg bg-slate-50 px-1 py-3">
-              <div
-                className="w-3 rounded-full bg-slate-900"
-                style={{ height: `${Math.max(6, (point.added / maxValue) * 100)}%` }}
-                title={`${formatDateLabel(point.date)}: ${point.added} added`}
+      <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-64 w-full" role="img" aria-label={title}>
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = padding.top + innerHeight - innerHeight * ratio
+            return (
+              <line
+                key={ratio}
+                x1={padding.left}
+                y1={y}
+                x2={width - padding.right}
+                y2={y}
+                stroke="rgb(226 232 240)"
+                strokeDasharray="4 6"
               />
-              <div
-                className="w-3 rounded-full bg-primary"
-                style={{ height: `${Math.max(6, (point.cached / maxValue) * 100)}%` }}
-                title={`${formatDateLabel(point.date)}: ${point.cached} cached`}
-              />
-            </div>
-            <div className="text-center text-[11px] text-slate-500">{formatDateLabel(point.date)}</div>
-          </div>
-        ))}
+            )
+          })}
+          <path d={addedPath} fill="none" stroke="rgb(15 23 42)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={cachedPath} fill="none" stroke="rgb(14 165 233)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {series.map((point, index) => (
+            <g key={point.date}>
+              <circle cx={toX(index)} cy={toY(point.added)} r="3.5" fill="rgb(15 23 42)" />
+              <circle cx={toX(index)} cy={toY(point.cached)} r="3.5" fill="rgb(14 165 233)" />
+            </g>
+          ))}
+        </svg>
+        <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+          {tickIndexes.map((index) => (
+            <span key={series[index]?.date}>{series[index] ? formatDateLabel(series[index]!.date) : ""}</span>
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -166,7 +193,7 @@ export default async function StatsPage() {
   const [repoOverview, repoDailyStats, openAIStatsResult] = await Promise.all([
     getRepoOverviewStats(),
     getRepoDailyStats(30),
-    getOpenAIStats(30),
+    getOpenAIStats(),
   ])
   const statusSeries = toRepoStatusSeries(repoOverview)
 
@@ -210,25 +237,25 @@ export default async function StatsPage() {
             <KpiCard
               label="Input Tokens"
               value={formatCompact(openAIStatsResult.data.totalInputTokens)}
-              hint="Total input tokens across the selected 30-day range."
+              hint="Total input tokens across the full tracked lifetime."
               icon={<ArrowRight className="h-5 w-5 text-slate-400" />}
             />
             <KpiCard
               label="Output Tokens"
               value={formatCompact(openAIStatsResult.data.totalOutputTokens)}
-              hint="Total output tokens across the selected 30-day range."
+              hint="Total output tokens across the full tracked lifetime."
               icon={<ArrowRight className="h-5 w-5 rotate-180 text-slate-400" />}
             />
             <KpiCard
               label="Requests"
               value={formatCompact(openAIStatsResult.data.totalRequests)}
-              hint="Model requests reported by the completions usage endpoint."
+              hint="Model requests reported across the full tracked lifetime."
               icon={<GitFork className="h-5 w-5 text-slate-400" />}
             />
             <KpiCard
               label="Cost"
               value={formatCurrency(openAIStatsResult.data.totalCost, openAIStatsResult.data.currency)}
-              hint="Cost aggregated from the organization costs endpoint for the same range."
+              hint="Cost aggregated from the organization costs endpoint across the full tracked lifetime."
               icon={<CircleDollarSign className="h-5 w-5 text-slate-400" />}
             />
           </div>
@@ -237,7 +264,7 @@ export default async function StatsPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
           <MultiBarChart
             title="Daily repo intake versus cached completions"
-            subtitle="A 30-day view of how many repos entered Discofork each day and how many ended the day cached and ready."
+            subtitle="A 30-day trend of how many repos entered Discofork each day and how many ended the day cached and ready."
             series={repoDailyStats}
           />
           <HorizontalBars
