@@ -380,16 +380,6 @@ export default async function StatsPage() {
           </div>
         ) : null}
 
-        {githubRateLimit.available ? (
-          <GitHubRateLimitSection
-            core={githubRateLimit.data.core}
-            search={githubRateLimit.data.search}
-            graphql={githubRateLimit.data.graphql}
-            pausedUntil={githubRateLimit.data.pausedUntil}
-            fetchedAt={githubRateLimit.data.fetchedAt}
-          />
-        ) : null}
-
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
           <MultiBarChart
             title="Daily repo intake versus cached completions"
@@ -402,6 +392,16 @@ export default async function StatsPage() {
             points={statusSeries}
           />
         </div>
+
+        {githubRateLimit.available ? (
+          <GitHubRateLimitSection
+            core={githubRateLimit.data.core}
+            search={githubRateLimit.data.search}
+            graphql={githubRateLimit.data.graphql}
+            pausedUntil={githubRateLimit.data.pausedUntil}
+            fetchedAt={githubRateLimit.data.fetchedAt}
+          />
+        ) : null}
 
         <div className="flex items-center justify-between gap-4 border-t border-border pt-2">
           <p className="text-xs text-slate-500">Snapshot updated {new Date(snapshot.generatedAt).toISOString().slice(0, 16).replace("T", " ")} UTC</p>
