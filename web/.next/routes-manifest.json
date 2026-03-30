@@ -45,6 +45,15 @@
         "nxtPrepo": "nxtPrepo"
       },
       "namedRegex": "^/(?<nxtPowner>[^/]+?)/(?<nxtPrepo>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/[owner]/[repo]/opengraph-image",
+      "regex": "^/([^/]+?)/([^/]+?)/opengraph\\-image(?:/)?$",
+      "routeKeys": {
+        "nxtPowner": "nxtPowner",
+        "nxtPrepo": "nxtPrepo"
+      },
+      "namedRegex": "^/(?<nxtPowner>[^/]+?)/(?<nxtPrepo>[^/]+?)/opengraph\\-image(?:/)?$"
     }
   ],
   "staticRoutes": [

@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 
 import { CachedRepositoryBrief, QueuedRepositoryBrief } from "@/components/repository-brief"
 import { RepoShell } from "@/components/repo-shell"
-import { fetchRepositoryView } from "@/lib/repository-api"
+import { resolveRepositoryView } from "@/lib/repository-service"
+import { buildRepoSocialSummary, getSiteOrigin } from "@/lib/repository-social"
 
 type RepoPageProps = {
   params: Promise<{
@@ -13,15 +14,44 @@ type RepoPageProps = {
 
 export async function generateMetadata({ params }: RepoPageProps): Promise<Metadata> {
   const { owner, repo } = await params
+  const view = await resolveRepositoryView(owner, repo)
+  const social = buildRepoSocialSummary(view)
+  const pageUrl = `${getSiteOrigin()}/${owner}/${repo}`
+  const ogImageUrl = `${pageUrl}/opengraph-image`
+
   return {
-    title: `${owner}/${repo} · Discofork`,
-    description: `Discofork.ai view for ${owner}/${repo}.`,
+    title: social.title,
+    description: social.description,
+    alternates: {
+      canonical: pageUrl,
+    },
+    openGraph: {
+      type: "article",
+      url: pageUrl,
+      title: social.title,
+      description: social.description,
+      siteName: "Discofork",
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${view.fullName} Discofork preview`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: social.title,
+      description: social.description,
+      images: [ogImageUrl],
+    },
   }
 }
 
 export default async function RepositoryPage({ params }: RepoPageProps) {
   const { owner, repo } = await params
-  const view = await fetchRepositoryView(owner, repo)
+  const view = await resolveRepositoryView(owner, repo)
 
   return (
     <RepoShell

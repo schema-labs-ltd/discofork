@@ -7,13 +7,6 @@
       "static/chunks/main-app-c3acdb403e42a0fb.js",
       "static/chunks/app/_not-found/page-f4bf67330beb9d81.js"
     ],
-    "/api/repo/[owner]/[repo]/route": [
-      "static/chunks/webpack-62b1c10a9a0701f0.js",
-      "static/chunks/4bd1b696-8b20f5740c9f0351.js",
-      "static/chunks/255-39d27bc9ae99e536.js",
-      "static/chunks/main-app-c3acdb403e42a0fb.js",
-      "static/chunks/app/api/repo/[owner]/[repo]/route-6f57b2ba9f9487e7.js"
-    ],
     "/layout": [
       "static/chunks/webpack-62b1c10a9a0701f0.js",
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
@@ -27,28 +20,42 @@
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
       "static/chunks/255-39d27bc9ae99e536.js",
       "static/chunks/main-app-c3acdb403e42a0fb.js",
-      "static/chunks/app/api/repo/[owner]/[repo]/status/route-6f57b2ba9f9487e7.js"
+      "static/chunks/app/api/repo/[owner]/[repo]/status/route-c71e464cd204e443.js"
+    ],
+    "/api/repo/[owner]/[repo]/route": [
+      "static/chunks/webpack-62b1c10a9a0701f0.js",
+      "static/chunks/4bd1b696-8b20f5740c9f0351.js",
+      "static/chunks/255-39d27bc9ae99e536.js",
+      "static/chunks/main-app-c3acdb403e42a0fb.js",
+      "static/chunks/app/api/repo/[owner]/[repo]/route-c71e464cd204e443.js"
     ],
     "/api/repos/requeue-failed/route": [
       "static/chunks/webpack-62b1c10a9a0701f0.js",
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
       "static/chunks/255-39d27bc9ae99e536.js",
       "static/chunks/main-app-c3acdb403e42a0fb.js",
-      "static/chunks/app/api/repos/requeue-failed/route-6f57b2ba9f9487e7.js"
+      "static/chunks/app/api/repos/requeue-failed/route-c71e464cd204e443.js"
     ],
     "/api/repos/route": [
       "static/chunks/webpack-62b1c10a9a0701f0.js",
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
       "static/chunks/255-39d27bc9ae99e536.js",
       "static/chunks/main-app-c3acdb403e42a0fb.js",
-      "static/chunks/app/api/repos/route-6f57b2ba9f9487e7.js"
+      "static/chunks/app/api/repos/route-c71e464cd204e443.js"
     ],
     "/api/stats/refresh/route": [
       "static/chunks/webpack-62b1c10a9a0701f0.js",
       "static/chunks/4bd1b696-8b20f5740c9f0351.js",
       "static/chunks/255-39d27bc9ae99e536.js",
       "static/chunks/main-app-c3acdb403e42a0fb.js",
-      "static/chunks/app/api/stats/refresh/route-6f57b2ba9f9487e7.js"
+      "static/chunks/app/api/stats/refresh/route-c71e464cd204e443.js"
+    ],
+    "/[owner]/[repo]/opengraph-image/route": [
+      "static/chunks/webpack-62b1c10a9a0701f0.js",
+      "static/chunks/4bd1b696-8b20f5740c9f0351.js",
+      "static/chunks/255-39d27bc9ae99e536.js",
+      "static/chunks/main-app-c3acdb403e42a0fb.js",
+      "static/chunks/app/[owner]/[repo]/opengraph-image/route-c71e464cd204e443.js"
     ],
     "/[owner]/[repo]/page": [
       "static/chunks/webpack-62b1c10a9a0701f0.js",
