@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { REPO_LIST_PAGE_SIZE, type RepoListView } from "@/lib/repository-list"
 import { databaseConfigured } from "@/lib/server/database"
+import { queueConfigured } from "@/lib/server/queue"
 import { listRepoRecords } from "@/lib/server/reports"
 
 function parsePage(rawValue: string | null): number {
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       hasPrevious: page > 1,
       hasNext: false,
       databaseEnabled: false,
+      queueEnabled: queueConfigured(),
     }
 
     return NextResponse.json(payload)
@@ -64,6 +66,7 @@ export async function GET(request: NextRequest) {
     hasPrevious: page > 1,
     hasNext: page < totalPages,
     databaseEnabled: true,
+    queueEnabled: queueConfigured(),
   }
 
   return NextResponse.json(payload)

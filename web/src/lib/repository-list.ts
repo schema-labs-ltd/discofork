@@ -37,4 +37,5 @@ export type RepoListView = {
   hasPrevious: boolean
   hasNext: boolean
   databaseEnabled: boolean
+  queueEnabled: boolean
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowRight, Database, GitFork, HardDriveDownload, LoaderCircle, Star } from "lucide-react"
 
+import { RequeueFailedButton } from "@/components/requeue-failed-button"
 import { RepoShell } from "@/components/repo-shell"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -132,7 +133,8 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
             {view.stats.failed > 0 ? <div>{view.stats.failed.toLocaleString()} failed</div> : null}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-start gap-2">
+            <RequeueFailedButton failedCount={view.stats.failed} queueEnabled={view.queueEnabled} />
             <Link
               href={view.hasPrevious ? `/repos?page=${view.page - 1}` : "/repos"}
               aria-disabled={!view.hasPrevious}

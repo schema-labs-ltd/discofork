@@ -154,3 +154,32 @@ export async function listRepoRecords(
 
   return { items, stats }
 }
+
+export async function listFailedRepoNames(): Promise<string[]> {
+  const rows = await query<{ full_name: string }>(
+    `select full_name
+    from repo_reports
+    where status = 'failed'
+    order by updated_at desc, full_name asc`,
+  )
+
+  return rows.map((row) => row.full_name)
+}
+
+export async function markReposQueued(fullNames: string[]): Promise<void> {
+  if (fullNames.length === 0) {
+    return
+  }
+
+  await query(
+    `update repo_reports
+    set status = 'queued',
+        error_message = null,
+        queued_at = now(),
+        processing_started_at = null,
+        updated_at = now(),
+        last_requested_at = now()
+    where full_name = any($1::text[])`,
+    [fullNames],
+  )
+}

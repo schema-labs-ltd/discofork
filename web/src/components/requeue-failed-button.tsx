@@ -1,0 +1,66 @@
+"use client"
+
+import { startTransition, useState } from "react"
+import { RotateCcw } from "lucide-react"
+import { useRouter } from "next/navigation"
+
+import { Button } from "@/components/ui/button"
+
+type RequeueFailedButtonProps = {
+  failedCount: number
+  queueEnabled: boolean
+}
+
+export function RequeueFailedButton({ failedCount, queueEnabled }: RequeueFailedButtonProps) {
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const disabled = failedCount === 0 || !queueEnabled || isSubmitting
+
+  async function handleClick() {
+    if (disabled) {
+      return
+    }
+
+    const confirmed = window.confirm(`Requeue all ${failedCount} failed jobs?`)
+    if (!confirmed) {
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/repos/requeue-failed", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error ?? `Request failed with status ${response.status}.`)
+      }
+
+      startTransition(() => {
+        router.refresh()
+      })
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not requeue failed jobs.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const label = isSubmitting ? "Requeueing..." : "Requeue Failed Jobs"
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button type="button" variant="outline" className="gap-2 rounded-md px-4" disabled={disabled} onClick={handleClick}>
+        <RotateCcw className="h-4 w-4" />
+        {label}
+      </Button>
+      {error ? <p className="text-right text-xs text-rose-600">{error}</p> : null}
+      {!queueEnabled ? <p className="text-right text-xs text-slate-500">Redis is required to requeue failed jobs.</p> : null}
+    </div>
+  )
+}
