@@ -170,6 +170,11 @@ function utcDayStartUnixToday(): number {
   return utcDayStartUnixDaysAgo(0)
 }
 
+function utcDayStartUnix(unixSeconds: number): number {
+  const date = new Date(unixSeconds * 1000)
+  return Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 1000)
+}
+
 function toFiniteNumber(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value)
   return Number.isFinite(number) ? number : 0
@@ -180,7 +185,7 @@ function toDateLabel(unixSeconds: unknown): string {
 }
 
 function getOpenAIStatsCacheKey(config: Extract<OpenAIApiConfig, { enabled: true }>): string {
-  return ["stats", "openai", "v3", config.apiKeyId ?? "all-keys", config.projectId ?? "all-projects"].join(":")
+  return ["stats", "openai", "v4", config.apiKeyId ?? "all-keys", config.projectId ?? "all-projects"].join(":")
 }
 
 function getOpenAIStatsCacheTtlSeconds(): number {
@@ -275,7 +280,7 @@ async function getOpenAIStatsStartTime(config: Extract<OpenAIApiConfig, { enable
   if (config.projectId) {
     const project = await fetchOpenAI<OpenAIProjectResponse>(`/organization/projects/${config.projectId}`, config)
     if (project.created_at !== undefined) {
-      return toFiniteNumber(project.created_at)
+      return utcDayStartUnix(toFiniteNumber(project.created_at))
     }
   }
 
@@ -298,16 +303,19 @@ export async function getOpenAIStats(): Promise<OpenAIStatsResult> {
   }
 
   const startTime = await getOpenAIStatsStartTime(config)
+  const nowUnix = Math.floor(Date.now() / 1000)
   const todayStart = utcDayStartUnixToday()
   const bucketCount = daysBetweenInclusive(startTime, todayStart)
 
   const usageParams = new URLSearchParams({
     start_time: String(startTime),
+    end_time: String(nowUnix),
     bucket_width: "1d",
     limit: String(bucketCount),
   })
   const costParams = new URLSearchParams({
     start_time: String(startTime),
+    end_time: String(nowUnix),
     bucket_width: "1d",
     limit: String(bucketCount),
   })
