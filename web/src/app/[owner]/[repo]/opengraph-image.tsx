@@ -40,13 +40,13 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
             flexDirection: "column",
             justifyContent: "space-between",
             margin: "0 auto",
-            maxWidth: 940,
+            maxWidth: 1040,
             width: "100%",
-            padding: "54px 72px 50px",
+            padding: "50px 58px 46px",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 560, flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 28 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 620, flex: 1 }}>
               <div
                 style={{
                   display: "flex",
@@ -69,20 +69,19 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
                 display: "flex",
                 flexDirection: "column",
                 gap: 12,
-                width: 210,
-                flexShrink: 0,
+                width: 250,
                 borderRadius: 28,
                 background: "rgba(255,255,255,0.78)",
                 border: "1px solid rgba(148,163,184,0.35)",
-                padding: "18px 18px",
+                padding: "20px 20px",
                 boxShadow: "0 20px 45px rgba(15,23,42,0.08)",
               }}
             >
               <div style={{ display: "flex", fontSize: 16, textTransform: "uppercase", letterSpacing: "0.22em", color: "#64748b" }}>
                 {view.kind === "cached" ? "Cached brief" : "Queue status"}
               </div>
-              <div style={{ display: "flex", fontSize: 20, fontWeight: 700, lineHeight: 1.25 }}>{social.statsLine}</div>
-              <div style={{ display: "flex", fontSize: 16, lineHeight: 1.45, color: "#475569" }}>
+              <div style={{ display: "flex", fontSize: 24, fontWeight: 700, lineHeight: 1.25 }}>{social.statsLine}</div>
+              <div style={{ display: "flex", fontSize: 18, lineHeight: 1.45, color: "#475569" }}>
                 {view.kind === "cached"
                   ? `Best maintained: ${view.recommendations.bestMaintained}`
                   : view.status === "queued"
