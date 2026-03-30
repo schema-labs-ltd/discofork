@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { parseGitHubRepoInput } from "../src/services/github.ts"
+import { parseGitHubRepoInput, parseLsRemoteHeadSha } from "../src/services/github.ts"
 
 describe("parseGitHubRepoInput", () => {
   test("parses full GitHub URLs", () => {
@@ -18,5 +18,18 @@ describe("parseGitHubRepoInput", () => {
       url: "https://github.com/cli/cli",
       cloneUrl: "https://github.com/cli/cli.git",
     })
+  })
+})
+
+describe("parseLsRemoteHeadSha", () => {
+  test("extracts the branch head sha from git ls-remote output", () => {
+    expect(parseLsRemoteHeadSha("0123456789abcdef0123456789abcdef01234567\trefs/heads/main\n")).toBe(
+      "0123456789abcdef0123456789abcdef01234567",
+    )
+  })
+
+  test("returns null for empty or malformed output", () => {
+    expect(parseLsRemoteHeadSha("")).toBeNull()
+    expect(parseLsRemoteHeadSha("not-a-sha\trefs/heads/main\n")).toBeNull()
   })
 })

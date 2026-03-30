@@ -4,6 +4,7 @@ import { AppError } from "../core/errors.ts"
 import type { DiscoveryResult, ForkMetadata, GitHubRepoRef, RepoMetadata } from "../core/types.ts"
 import type { Logger } from "../core/logger.ts"
 import { compareForksForSelection, daysSince, recommendForks, scoreForkCandidate } from "./heuristics.ts"
+import { runGitHubCommand } from "./github-command.ts"
 import { runCommand } from "./command.ts"
 
 const repoViewSchema = z.object({
@@ -47,12 +48,6 @@ const forkSchema = z.object({
     })
     .nullable()
     .optional(),
-})
-
-const branchSchema = z.object({
-  commit: z.object({
-    sha: z.string(),
-  }),
 })
 
 type ForkHeadState = {
@@ -152,15 +147,29 @@ function toRepoMetadata(parsed: z.infer<typeof repoViewSchema>): RepoMetadata {
   }
 }
 
-async function fetchBranchHeadSha(
-  repoFullName: string,
+export function parseLsRemoteHeadSha(output: string): string | null {
+  const line = output
+    .split("\n")
+    .map((entry) => entry.trim())
+    .find(Boolean)
+
+  if (!line) {
+    return null
+  }
+
+  const [sha = ""] = line.split(/\s+/, 1)
+  return /^[0-9a-f]{40}$/i.test(sha) ? sha : null
+}
+
+async function fetchRemoteBranchHeadSha(
+  cloneUrl: string,
   branch: string,
   logger?: Logger,
 ): Promise<string | null> {
   const result = await runCommand(
     {
-      command: "gh",
-      args: ["api", `repos/${repoFullName}/branches/${branch}`, "--jq", "{commit:{sha:.commit.sha}}"],
+      command: "git",
+      args: ["ls-remote", "--heads", cloneUrl, `refs/heads/${branch}`],
     },
     { logger, allowFailure: true },
   )
@@ -169,8 +178,7 @@ async function fetchBranchHeadSha(
     return null
   }
 
-  const parsed = branchSchema.parse(JSON.parse(result.stdout.trim() || "{}"))
-  return parsed.commit.sha
+  return parseLsRemoteHeadSha(result.stdout)
 }
 
 async function fetchForkHeadState(
@@ -178,7 +186,7 @@ async function fetchForkHeadState(
   fork: ForkMetadata,
   logger?: Logger,
 ): Promise<ForkHeadState | null> {
-  const headSha = await fetchBranchHeadSha(fork.fullName, fork.defaultBranch, logger)
+  const headSha = await fetchRemoteBranchHeadSha(`https://github.com/${fork.fullName}.git`, fork.defaultBranch, logger)
   if (!headSha) {
     await logger?.warn("fork_compare:failed", {
       fork: fork.fullName,
@@ -243,7 +251,7 @@ async function enrichForkComparisons(
 }
 
 export async function fetchRepoMetadata(repo: GitHubRepoRef, logger?: Logger): Promise<RepoMetadata> {
-  const result = await runCommand(
+  const result = await runGitHubCommand(
     {
       command: "gh",
       args: [
@@ -268,7 +276,7 @@ async function fetchForkSlice(
   perPage: number,
   logger?: Logger,
 ): Promise<ForkMetadata[]> {
-  const result = await runCommand(
+  const result = await runGitHubCommand(
     {
       command: "gh",
       args: ["api", `repos/${repo.fullName}/forks?sort=${sort}&per_page=${perPage}&page=${page}`],
@@ -325,7 +333,7 @@ export async function discoverForks(
   onProgress?.("Discovering forks (loading upstream metadata)")
   const upstream = await fetchRepoMetadata(repo, logger)
   onProgress?.("Discovering forks (loading upstream HEAD)")
-  const upstreamHeadSha = await fetchBranchHeadSha(upstream.fullName, upstream.defaultBranch, logger)
+  const upstreamHeadSha = await fetchRemoteBranchHeadSha(repo.cloneUrl, upstream.defaultBranch, logger)
   if (!upstreamHeadSha) {
     throw new AppError("DISCOVERY_FAILED", `Could not resolve upstream HEAD for ${upstream.fullName}:${upstream.defaultBranch}.`)
   }

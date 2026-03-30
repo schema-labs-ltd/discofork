@@ -1,3 +1,4 @@
+import { GITHUB_API_PAUSE_UNTIL_KEY, GITHUB_RATE_LIMIT_SNAPSHOT_KEY } from "./constants"
 import { query } from "./database"
 import { getRedisClient, queueConfigured } from "./queue"
 
@@ -54,14 +55,37 @@ export type OpenAIStatsResult =
       data: OpenAIStats
     }
 
+export type GitHubRateLimitBucket = {
+  limit: number
+  remaining: number
+  used: number
+  resetAt: string | null
+}
+
+export type GitHubRateLimitStats = {
+  fetchedAt: string
+  core: GitHubRateLimitBucket
+  search: GitHubRateLimitBucket
+  graphql: GitHubRateLimitBucket
+  pausedUntil: string | null
+}
+
+export type GitHubRateLimitResult =
+  | { available: false; reason: string }
+  | {
+      available: true
+      data: GitHubRateLimitStats
+    }
+
 export type StatsSnapshot = {
   generatedAt: string
   repoOverview: RepoOverviewStats
   repoDailyStats: RepoDailyStatsPoint[]
   openAIStats: OpenAIStatsResult
+  githubRateLimit: GitHubRateLimitResult
 }
 
-const STATS_SNAPSHOT_CACHE_KEY = "stats:snapshot:v1"
+const STATS_SNAPSHOT_CACHE_KEY = "stats:snapshot:v2"
 
 export async function getRepoOverviewStats(): Promise<RepoOverviewStats> {
   const rows = await query<RepoOverviewStats>(
@@ -206,6 +230,83 @@ function getOpenAIStatsCacheTtlSeconds(): number {
   return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 900
 }
 
+function getGitHubToken(): string | null {
+  return process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? null
+}
+
+function toRateLimitBucket(bucket?: { limit?: number; remaining?: number; used?: number; reset?: number }): GitHubRateLimitBucket {
+  const reset = toFiniteNumber(bucket?.reset)
+  return {
+    limit: toFiniteNumber(bucket?.limit),
+    remaining: toFiniteNumber(bucket?.remaining),
+    used: toFiniteNumber(bucket?.used),
+    resetAt: reset > 0 ? new Date(reset * 1000).toISOString() : null,
+  }
+}
+
+function parseGitHubRateLimitResponse(payload: GitHubRateLimitApiResponse): Omit<GitHubRateLimitStats, "pausedUntil"> {
+  return {
+    fetchedAt: new Date().toISOString(),
+    core: toRateLimitBucket(payload.resources?.core),
+    search: toRateLimitBucket(payload.resources?.search),
+    graphql: toRateLimitBucket(payload.resources?.graphql),
+  }
+}
+
+async function readGitHubPauseUntil(): Promise<string | null> {
+  if (!queueConfigured()) {
+    return null
+  }
+
+  try {
+    const redis = await getRedisClient()
+    const raw = await redis.get(GITHUB_API_PAUSE_UNTIL_KEY)
+    const pauseUntil = Number(raw ?? "0")
+    return Number.isFinite(pauseUntil) && pauseUntil > Date.now() ? new Date(pauseUntil).toISOString() : null
+  } catch {
+    return null
+  }
+}
+
+async function readCachedGitHubRateLimitStats(): Promise<GitHubRateLimitResult | null> {
+  if (!queueConfigured()) {
+    return null
+  }
+
+  try {
+    const redis = await getRedisClient()
+    const raw = await redis.get(GITHUB_RATE_LIMIT_SNAPSHOT_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const pausedUntil = await readGitHubPauseUntil()
+    const snapshot = JSON.parse(raw) as Omit<GitHubRateLimitStats, "pausedUntil"> | GitHubRateLimitStats
+    return {
+      available: true,
+      data: {
+        ...snapshot,
+        pausedUntil,
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
+async function writeCachedGitHubRateLimitStats(snapshot: Omit<GitHubRateLimitStats, "pausedUntil">): Promise<void> {
+  if (!queueConfigured()) {
+    return
+  }
+
+  try {
+    const redis = await getRedisClient()
+    await redis.set(GITHUB_RATE_LIMIT_SNAPSHOT_KEY, JSON.stringify(snapshot))
+  } catch {
+    // Stats should still render even if cache writes fail.
+  }
+}
+
 async function readCachedOpenAIStats(cacheKey: string): Promise<OpenAIStatsResult | null> {
   if (!queueConfigured()) {
     return null
@@ -309,6 +410,29 @@ type OpenAICostResponse = {
 type OpenAIProjectResponse = {
   id: string
   created_at?: number | string
+}
+
+type GitHubRateLimitApiResponse = {
+  resources?: {
+    core?: {
+      limit?: number
+      remaining?: number
+      used?: number
+      reset?: number
+    }
+    search?: {
+      limit?: number
+      remaining?: number
+      used?: number
+      reset?: number
+    }
+    graphql?: {
+      limit?: number
+      remaining?: number
+      used?: number
+      reset?: number
+    }
+  }
 }
 
 function daysBetweenInclusive(startUnixSeconds: number, endUnixSeconds: number): number {
@@ -445,11 +569,62 @@ export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<Ope
   }
 }
 
+async function fetchGitHubRateLimitStats(): Promise<GitHubRateLimitResult> {
+  const token = getGitHubToken()
+  if (!token) {
+    const cached = await readCachedGitHubRateLimitStats()
+    return (
+      cached ?? {
+        available: false,
+        reason: "Set GH_TOKEN or GITHUB_TOKEN to load GitHub rate limit status.",
+      }
+    )
+  }
+
+  try {
+    const response = await fetch("https://api.github.com/rate_limit", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2026-03-10",
+      },
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      throw new Error(`GitHub API request failed with status ${response.status}.`)
+    }
+
+    const payload = (await response.json()) as GitHubRateLimitApiResponse
+    const parsed = parseGitHubRateLimitResponse(payload)
+    await writeCachedGitHubRateLimitStats(parsed)
+
+    return {
+      available: true,
+      data: {
+        ...parsed,
+        pausedUntil: await readGitHubPauseUntil(),
+      },
+    }
+  } catch (error) {
+    const cached = await readCachedGitHubRateLimitStats()
+    if (cached) {
+      return cached
+    }
+
+    return {
+      available: false,
+      reason: error instanceof Error ? error.message : "Could not load GitHub rate limit status.",
+    }
+  }
+}
+
 export async function refreshStatsSnapshot(): Promise<StatsSnapshot> {
-  const [repoOverview, repoDailyStats, openAIStats] = await Promise.all([
+  const [repoOverview, repoDailyStats, openAIStats, githubRateLimit] = await Promise.all([
     getRepoOverviewStats(),
     getRepoDailyStats(30),
     getOpenAIStats({ fresh: true }),
+    fetchGitHubRateLimitStats(),
   ])
 
   const snapshot: StatsSnapshot = {
@@ -457,6 +632,7 @@ export async function refreshStatsSnapshot(): Promise<StatsSnapshot> {
     repoOverview,
     repoDailyStats,
     openAIStats,
+    githubRateLimit,
   }
 
   await writeStatsSnapshot(snapshot)

@@ -1,11 +1,17 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
-import { ArrowRight, CircleDollarSign, Database, GitFork, LoaderCircle, Star } from "lucide-react"
+import { ArrowRight, CircleDollarSign, Clock3, Database, GitFork, LoaderCircle, Star } from "lucide-react"
 
 import { RequeueFailedButton } from "@/components/requeue-failed-button"
 import { RepoShell } from "@/components/repo-shell"
 import { queueConfigured } from "@/lib/server/queue"
-import { getCachedStatsSnapshot, toRepoStatusSeries, type RepoDailyStatsPoint, type RepoStatusPoint } from "@/lib/server/stats"
+import {
+  getCachedStatsSnapshot,
+  toRepoStatusSeries,
+  type GitHubRateLimitBucket,
+  type RepoDailyStatsPoint,
+  type RepoStatusPoint,
+} from "@/lib/server/stats"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
@@ -44,6 +50,14 @@ function formatDateLabel(date: string): string {
     month: "short",
     day: "numeric",
   })
+}
+
+function formatUtcTimestamp(value: string | null): string {
+  if (!value) {
+    return "Unknown"
+  }
+
+  return new Date(value).toISOString().slice(0, 16).replace("T", " ") + " UTC"
 }
 
 function KpiCard({
@@ -213,6 +227,72 @@ function HorizontalBars({
   )
 }
 
+function GitHubRateLimitSection({
+  core,
+  search,
+  graphql,
+  pausedUntil,
+  fetchedAt,
+}: {
+  core: GitHubRateLimitBucket
+  search: GitHubRateLimitBucket
+  graphql: GitHubRateLimitBucket
+  pausedUntil: string | null
+  fetchedAt: string
+}) {
+  const buckets = [
+    { label: "Core", bucket: core, tone: "bg-slate-900" },
+    { label: "Search", bucket: search, tone: "bg-sky-500" },
+    { label: "GraphQL", bucket: graphql, tone: "bg-emerald-500" },
+  ]
+
+  return (
+    <section className="rounded-xl border border-border bg-white p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">GitHub API</div>
+          <h2 className="text-lg font-semibold tracking-tight text-slate-950">Shared rate limit status</h2>
+          <p className="text-sm leading-6 text-slate-600">
+            Workers use the core quota to decide whether to keep issuing GitHub API requests or wait for the reset window.
+          </p>
+        </div>
+        <div className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">
+          Snapshot {formatUtcTimestamp(fetchedAt)}
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {buckets.map(({ label, bucket, tone }) => {
+          const percentRemaining = bucket.limit > 0 ? (bucket.remaining / bucket.limit) * 100 : 0
+          return (
+            <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">{label}</div>
+                <span className={cn("h-2.5 w-2.5 rounded-full", tone)} />
+              </div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {bucket.remaining.toLocaleString()}
+                <span className="ml-1 text-base font-medium text-slate-500">/ {bucket.limit.toLocaleString()}</span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {formatPercent(percentRemaining)} remaining. Resets {formatUtcTimestamp(bucket.resetAt)}.
+              </p>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <span>{pausedUntil ? `Workers paused until ${formatUtcTimestamp(pausedUntil)}.` : "Workers are clear to continue calling GitHub."}</span>
+        <span className="inline-flex items-center gap-2 text-slate-500">
+          <Clock3 className="h-4 w-4" />
+          Uses the shared Redis snapshot plus GitHub reset time.
+        </span>
+      </div>
+    </section>
+  )
+}
+
 export default async function StatsPage() {
   const snapshot = await getCachedStatsSnapshot()
   const queueEnabled = queueConfigured()
@@ -232,7 +312,7 @@ export default async function StatsPage() {
     )
   }
 
-  const { repoOverview, repoDailyStats, openAIStats: openAIStatsResult } = snapshot
+  const { repoOverview, repoDailyStats, openAIStats: openAIStatsResult, githubRateLimit } = snapshot
   const statusSeries = toRepoStatusSeries(repoOverview)
   const cachedCoverage = repoOverview.total === 0 ? 0 : (repoOverview.cached / repoOverview.total) * 100
 
@@ -298,6 +378,16 @@ export default async function StatsPage() {
               icon={<CircleDollarSign className="h-5 w-5 text-slate-400" />}
             />
           </div>
+        ) : null}
+
+        {githubRateLimit.available ? (
+          <GitHubRateLimitSection
+            core={githubRateLimit.data.core}
+            search={githubRateLimit.data.search}
+            graphql={githubRateLimit.data.graphql}
+            pausedUntil={githubRateLimit.data.pausedUntil}
+            fetchedAt={githubRateLimit.data.fetchedAt}
+          />
         ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
