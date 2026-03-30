@@ -39,16 +39,18 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
+            margin: "0 auto",
+            maxWidth: 1040,
             width: "100%",
-            padding: "42px 48px",
+            padding: "50px 58px 46px",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 32 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 28 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 620, flex: 1 }}>
               <div
                 style={{
                   display: "flex",
-                  fontSize: 20,
+                  fontSize: 18,
                   letterSpacing: "0.34em",
                   textTransform: "uppercase",
                   color: "#2563eb",
@@ -57,8 +59,8 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
                 Discofork
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ display: "flex", fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{social.imageTitle}</div>
-                <div style={{ display: "flex", fontSize: 28, lineHeight: 1.35, color: "#334155" }}>{social.imageSubtitle}</div>
+                <div style={{ display: "flex", fontSize: 52, fontWeight: 700, lineHeight: 1.05 }}>{social.imageTitle}</div>
+                <div style={{ display: "flex", fontSize: 24, lineHeight: 1.35, color: "#334155" }}>{social.imageSubtitle}</div>
               </div>
             </div>
 
@@ -67,19 +69,19 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
                 display: "flex",
                 flexDirection: "column",
                 gap: 12,
-                minWidth: 280,
+                width: 250,
                 borderRadius: 28,
                 background: "rgba(255,255,255,0.78)",
                 border: "1px solid rgba(148,163,184,0.35)",
-                padding: "22px 24px",
+                padding: "20px 20px",
                 boxShadow: "0 20px 45px rgba(15,23,42,0.08)",
               }}
             >
-              <div style={{ display: "flex", fontSize: 18, textTransform: "uppercase", letterSpacing: "0.22em", color: "#64748b" }}>
+              <div style={{ display: "flex", fontSize: 16, textTransform: "uppercase", letterSpacing: "0.22em", color: "#64748b" }}>
                 {view.kind === "cached" ? "Cached brief" : "Queue status"}
               </div>
-              <div style={{ display: "flex", fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>{social.statsLine}</div>
-              <div style={{ display: "flex", fontSize: 20, lineHeight: 1.45, color: "#475569" }}>
+              <div style={{ display: "flex", fontSize: 24, fontWeight: 700, lineHeight: 1.25 }}>{social.statsLine}</div>
+              <div style={{ display: "flex", fontSize: 18, lineHeight: 1.45, color: "#475569" }}>
                 {view.kind === "cached"
                   ? `Best maintained: ${view.recommendations.bestMaintained}`
                   : view.status === "queued"
@@ -95,19 +97,20 @@ export default async function RepoOpenGraphImage({ params }: RepoOgImageProps) {
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 16,
-              padding: "24px 28px",
+              gap: 14,
+              marginTop: 18,
+              padding: "22px 26px",
               borderRadius: 30,
               background: "rgba(15,23,42,0.92)",
               color: "#e2e8f0",
             }}
           >
-            <div style={{ display: "flex", fontSize: 18, textTransform: "uppercase", letterSpacing: "0.2em", color: "#93c5fd" }}>
+            <div style={{ display: "flex", fontSize: 16, textTransform: "uppercase", letterSpacing: "0.2em", color: "#93c5fd" }}>
               Fork highlights
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {social.forkHighlights.slice(0, 3).map((highlight) => (
-                <div key={highlight} style={{ display: "flex", fontSize: 24, lineHeight: 1.35 }}>
+                <div key={highlight} style={{ display: "flex", fontSize: 22, lineHeight: 1.35 }}>
                   • {highlight}
                 </div>
               ))}
