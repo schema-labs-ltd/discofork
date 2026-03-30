@@ -323,7 +323,7 @@ async function getOpenAIStatsStartTime(config: Extract<OpenAIApiConfig, { enable
   return Math.floor(Date.UTC(2020, 0, 1) / 1000)
 }
 
-export async function getOpenAIStats(): Promise<OpenAIStatsResult> {
+export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<OpenAIStatsResult> {
   const config = getOpenAIConfig()
   if (!config.enabled) {
     return {
@@ -333,9 +333,11 @@ export async function getOpenAIStats(): Promise<OpenAIStatsResult> {
   }
 
   const cacheKey = getOpenAIStatsCacheKey(config)
-  const cached = await readCachedOpenAIStats(cacheKey)
-  if (cached) {
-    return cached
+  if (!options?.fresh) {
+    const cached = await readCachedOpenAIStats(cacheKey)
+    if (cached) {
+      return cached
+    }
   }
 
   const startTime = await getOpenAIStatsStartTime(config)
@@ -442,7 +444,7 @@ export async function refreshStatsSnapshot(): Promise<StatsSnapshot> {
   const [repoOverview, repoDailyStats, openAIStats] = await Promise.all([
     getRepoOverviewStats(),
     getRepoDailyStats(30),
-    getOpenAIStats(),
+    getOpenAIStats({ fresh: true }),
   ])
 
   const snapshot: StatsSnapshot = {
