@@ -1,4 +1,5 @@
 import { query } from "./database"
+import { getRedisClient, queueConfigured } from "./queue"
 
 export type RepoOverviewStats = {
   total: number
@@ -46,6 +47,13 @@ export type OpenAIStats = {
   costSeries: OpenAICostPoint[]
 }
 
+type OpenAIStatsResult =
+  | { available: false; reason: string }
+  | {
+      available: true
+      data: OpenAIStats
+    }
+
 export async function getRepoOverviewStats(): Promise<RepoOverviewStats> {
   const rows = await query<RepoOverviewStats>(
     `select
@@ -82,16 +90,16 @@ export async function getRepoDailyStats(days: number): Promise<RepoDailyStatsPoi
       )::date as day
     ),
     added as (
-      select created_at::date as day, count(*)::int as count
+      select date_trunc('day', created_at)::date as day, count(*)::int as count
       from repo_reports
-      where created_at::date >= current_date - ($1::int - 1) * interval '1 day'
+      where created_at >= current_date - ($1::int - 1) * interval '1 day'
       group by 1
     ),
     cached as (
-      select cached_at::date as day, count(*)::int as count
+      select date_trunc('day', cached_at)::date as day, count(*)::int as count
       from repo_reports
       where cached_at is not null
-        and cached_at::date >= current_date - ($1::int - 1) * interval '1 day'
+        and cached_at >= current_date - ($1::int - 1) * interval '1 day'
       group by 1
     )
     select
@@ -166,6 +174,48 @@ function toDateLabel(unixSeconds: unknown): string {
   return new Date(toFiniteNumber(unixSeconds) * 1000).toISOString().slice(0, 10)
 }
 
+function getOpenAIStatsCacheKey(days: number, config: Extract<OpenAIApiConfig, { enabled: true }>): string {
+  return ["stats", "openai", "v1", String(days), config.apiKeyId ?? "all-keys", config.projectId ?? "all-projects"].join(":")
+}
+
+function getOpenAIStatsCacheTtlSeconds(): number {
+  const configured = Number(process.env.OPENAI_STATS_CACHE_TTL_SECONDS ?? "900")
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 900
+}
+
+async function readCachedOpenAIStats(cacheKey: string): Promise<OpenAIStatsResult | null> {
+  if (!queueConfigured()) {
+    return null
+  }
+
+  try {
+    const redis = await getRedisClient()
+    const raw = await redis.get(cacheKey)
+    if (!raw) {
+      return null
+    }
+
+    return JSON.parse(raw) as OpenAIStatsResult
+  } catch {
+    return null
+  }
+}
+
+async function writeCachedOpenAIStats(cacheKey: string, value: OpenAIStatsResult): Promise<void> {
+  if (!queueConfigured()) {
+    return
+  }
+
+  try {
+    const redis = await getRedisClient()
+    await redis.set(cacheKey, JSON.stringify(value), {
+      EX: getOpenAIStatsCacheTtlSeconds(),
+    })
+  } catch {
+    // Stats should still render even if cache writes fail.
+  }
+}
+
 async function fetchOpenAI<T>(path: string, config: Extract<OpenAIApiConfig, { enabled: true }>): Promise<T> {
   const response = await fetch(`https://api.openai.com/v1${path}`, {
     headers: {
@@ -206,19 +256,19 @@ type OpenAICostResponse = {
   }>
 }
 
-export async function getOpenAIStats(days: number): Promise<
-  | { available: false; reason: string }
-  | {
-      available: true
-      data: OpenAIStats
-    }
-> {
+export async function getOpenAIStats(days: number): Promise<OpenAIStatsResult> {
   const config = getOpenAIConfig()
   if (!config.enabled) {
     return {
       available: false,
       reason: config.reason,
     }
+  }
+
+  const cacheKey = getOpenAIStatsCacheKey(days, config)
+  const cached = await readCachedOpenAIStats(cacheKey)
+  if (cached) {
+    return cached
   }
 
   const usageParams = new URLSearchParams({
@@ -288,7 +338,7 @@ export async function getOpenAIStats(days: number): Promise<
       }
     })
 
-    return {
+    const result: OpenAIStatsResult = {
       available: true,
       data: {
         scopeLabel: config.scopeLabel,
@@ -302,10 +352,14 @@ export async function getOpenAIStats(days: number): Promise<
         costSeries,
       },
     }
+    await writeCachedOpenAIStats(cacheKey, result)
+    return result
   } catch (error) {
-    return {
+    const result: OpenAIStatsResult = {
       available: false,
       reason: error instanceof Error ? error.message : "Could not load OpenAI usage data.",
     }
+    await writeCachedOpenAIStats(cacheKey, result)
+    return result
   }
 }

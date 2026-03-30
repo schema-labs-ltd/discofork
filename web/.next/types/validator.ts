@@ -74,10 +74,37 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/stats/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/stats">> = Specific
+  const handler = {} as typeof import("../../src/app/stats/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/repo/[owner]/[repo]/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/repo/[owner]/[repo]">> = Specific
   const handler = {} as typeof import("../../src/app/api/repo/[owner]/[repo]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/repo/[owner]/[repo]/status/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/repo/[owner]/[repo]/status">> = Specific
+  const handler = {} as typeof import("../../src/app/api/repo/[owner]/[repo]/status/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/repos/requeue-failed/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/repos/requeue-failed">> = Specific
+  const handler = {} as typeof import("../../src/app/api/repos/requeue-failed/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

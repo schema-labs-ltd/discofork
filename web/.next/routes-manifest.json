@@ -29,6 +29,15 @@
       "namedRegex": "^/api/repo/(?<nxtPowner>[^/]+?)/(?<nxtPrepo>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/repo/[owner]/[repo]/status",
+      "regex": "^/api/repo/([^/]+?)/([^/]+?)/status(?:/)?$",
+      "routeKeys": {
+        "nxtPowner": "nxtPowner",
+        "nxtPrepo": "nxtPrepo"
+      },
+      "namedRegex": "^/api/repo/(?<nxtPowner>[^/]+?)/(?<nxtPrepo>[^/]+?)/status(?:/)?$"
+    },
+    {
       "page": "/[owner]/[repo]",
       "regex": "^/([^/]+?)/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -56,6 +65,12 @@
       "regex": "^/repos(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/repos(?:/)?$"
+    },
+    {
+      "page": "/stats",
+      "regex": "^/stats(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/stats(?:/)?$"
     }
   ],
   "dataRoutes": [],
