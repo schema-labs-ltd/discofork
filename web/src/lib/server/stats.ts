@@ -157,8 +157,13 @@ function unixDaysAgo(days: number): number {
   return Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000)
 }
 
-function toDateLabel(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toISOString().slice(0, 10)
+function toFiniteNumber(value: unknown): number {
+  const number = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function toDateLabel(unixSeconds: unknown): string {
+  return new Date(toFiniteNumber(unixSeconds) * 1000).toISOString().slice(0, 10)
 }
 
 async function fetchOpenAI<T>(path: string, config: Extract<OpenAIApiConfig, { enabled: true }>): Promise<T> {
@@ -179,22 +184,22 @@ async function fetchOpenAI<T>(path: string, config: Extract<OpenAIApiConfig, { e
 
 type OpenAIUsageResponse = {
   data?: Array<{
-    start_time: number
+    start_time: number | string
     results?: Array<{
-      input_tokens?: number
-      output_tokens?: number
-      input_cached_tokens?: number
-      num_model_requests?: number
+      input_tokens?: number | string
+      output_tokens?: number | string
+      input_cached_tokens?: number | string
+      num_model_requests?: number | string
     }>
   }>
 }
 
 type OpenAICostResponse = {
   data?: Array<{
-    start_time: number
+    start_time: number | string
     results?: Array<{
       amount?: {
-        value?: number
+        value?: number | string
         currency?: string
       } | null
     }>
@@ -245,10 +250,10 @@ export async function getOpenAIStats(days: number): Promise<
     const usageSeries = (usageResponse.data ?? []).map((bucket) => {
       const aggregate = (bucket.results ?? []).reduce(
         (totals, result) => ({
-          inputTokens: totals.inputTokens + (result.input_tokens ?? 0),
-          outputTokens: totals.outputTokens + (result.output_tokens ?? 0),
-          cachedTokens: totals.cachedTokens + (result.input_cached_tokens ?? 0),
-          requests: totals.requests + (result.num_model_requests ?? 0),
+          inputTokens: totals.inputTokens + toFiniteNumber(result.input_tokens),
+          outputTokens: totals.outputTokens + toFiniteNumber(result.output_tokens),
+          cachedTokens: totals.cachedTokens + toFiniteNumber(result.input_cached_tokens),
+          requests: totals.requests + toFiniteNumber(result.num_model_requests),
         }),
         {
           inputTokens: 0,
@@ -267,7 +272,7 @@ export async function getOpenAIStats(days: number): Promise<
     const costSeries = (costResponse.data ?? []).map((bucket) => {
       const aggregate = (bucket.results ?? []).reduce(
         (totals, result) => ({
-          amount: totals.amount + (result.amount?.value ?? 0),
+          amount: totals.amount + toFiniteNumber(result.amount?.value),
           currency: result.amount?.currency ?? totals.currency,
         }),
         {
