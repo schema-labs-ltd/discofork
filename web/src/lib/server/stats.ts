@@ -179,6 +179,10 @@ function utcDayStartUnixToday(): number {
   return utcDayStartUnixDaysAgo(0)
 }
 
+function utcDayStartUnixTomorrow(): number {
+  return utcDayStartUnixDaysAgo(-1)
+}
+
 function utcDayStartUnix(unixSeconds: number): number {
   const date = new Date(unixSeconds * 1000)
   return Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 1000)
@@ -343,6 +347,7 @@ export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<Ope
   const startTime = await getOpenAIStatsStartTime(config)
   const nowUnix = Math.floor(Date.now() / 1000)
   const todayStart = utcDayStartUnixToday()
+  const tomorrowStart = utcDayStartUnixTomorrow()
   const bucketCount = daysBetweenInclusive(startTime, todayStart)
 
   const usageParams = new URLSearchParams({
@@ -353,7 +358,7 @@ export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<Ope
   })
   const costParams = new URLSearchParams({
     start_time: String(startTime),
-    end_time: String(nowUnix),
+    end_time: String(tomorrowStart),
     bucket_width: "1d",
     limit: String(bucketCount),
   })
