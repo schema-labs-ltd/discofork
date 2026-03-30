@@ -31,6 +31,12 @@ import { createWorkspacePaths } from "./workspace.ts"
 
 type ProgressHandler = (event: ProgressEvent) => void
 
+type AnalysedFork = {
+  metadata: ForkMetadata
+  diffFacts: DiffFacts
+  analysis: ForkAnalysis
+}
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
@@ -129,61 +135,85 @@ export async function runAnalysis(
       detail: `Processing ${selectedForks.length} selected forks with concurrency ${compareConcurrency}`,
     })
 
-    const analysedForks = await mapWithConcurrency(selectedForks, compareConcurrency, async (fork) => {
-      const cachedFork = await loadForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata)
-      let diffFacts: DiffFacts
-      let analysis: ForkAnalysis
+    const analysedForkResults = await mapWithConcurrency<ForkMetadata, AnalysedFork | null>(
+      selectedForks,
+      compareConcurrency,
+      async (fork) => {
+        try {
+          const cachedFork = await loadForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata)
+          let diffFacts: DiffFacts
+          let analysis: ForkAnalysis
 
-      if (cachedFork) {
-        diffFacts = cachedFork.diffFacts
-        analysis = cachedFork.analysis
-        onProgress({ type: "fork", fork: fork.fullName, detail: `Using cached fork analysis from ${cachedFork.cachedAt}` })
-      } else {
-        onProgress({ type: "fork", fork: fork.fullName, detail: "Cloning or updating fork" })
-        const forkDir = paths.forkRepoDir(fork.fullName)
-        const [forkOwner, forkName] = fork.fullName.split("/")
-        const forkRef: GitHubRepoRef = {
-          owner: forkOwner!,
-          name: forkName!,
-          fullName: fork.fullName,
-          url: `https://github.com/${fork.fullName}`,
-          cloneUrl: `https://github.com/${fork.fullName}.git`,
+          if (cachedFork) {
+            diffFacts = cachedFork.diffFacts
+            analysis = cachedFork.analysis
+            onProgress({ type: "fork", fork: fork.fullName, detail: `Using cached fork analysis from ${cachedFork.cachedAt}` })
+          } else {
+            onProgress({ type: "fork", fork: fork.fullName, detail: "Cloning or updating fork" })
+            const forkDir = paths.forkRepoDir(fork.fullName)
+            const [forkOwner, forkName] = fork.fullName.split("/")
+            const forkRef: GitHubRepoRef = {
+              owner: forkOwner!,
+              name: forkName!,
+              fullName: fork.fullName,
+              url: `https://github.com/${fork.fullName}`,
+              cloneUrl: `https://github.com/${fork.fullName}.git`,
+            }
+
+            await cloneOrUpdateRepository(forkRef, forkDir, fork.defaultBranch, logger)
+            await ensureUpstreamRemote(forkDir, repo, upstreamBranch, logger)
+
+            onProgress({ type: "fork", fork: fork.fullName, detail: "Comparing against upstream" })
+            diffFacts = await collectDiffFacts(
+              forkDir,
+              fork.defaultBranch,
+              upstreamBranch,
+              options.maxCommitSamples,
+              options.maxChangedFiles,
+              logger,
+            )
+
+            onProgress({ type: "fork", fork: fork.fullName, detail: "Interpreting changes with Codex" })
+            analysis = await analyzeForkWithCodex(
+              fork,
+              upstreamFacts,
+              diffFacts,
+              upstreamAnalysis,
+              path.join(cwd, "schemas", "fork-analysis.schema.json"),
+              path.join(paths.codexRoot, fork.fullName.replace("/", "__")),
+              forkDir,
+              logger,
+            )
+
+            await saveForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata, diffFacts, analysis)
+          }
+
+          return {
+            metadata: fork,
+            diffFacts,
+            analysis,
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          await logger.warn("fork_analysis:skipped", {
+            repository: repo.fullName,
+            fork: fork.fullName,
+            message,
+          })
+          onProgress({
+            type: "warning",
+            message: `Skipping fork ${fork.fullName}: ${message}`,
+          })
+          return null
         }
-
-        await cloneOrUpdateRepository(forkRef, forkDir, fork.defaultBranch, logger)
-        await ensureUpstreamRemote(forkDir, repo, upstreamBranch, logger)
-
-        onProgress({ type: "fork", fork: fork.fullName, detail: "Comparing against upstream" })
-        diffFacts = await collectDiffFacts(
-          forkDir,
-          fork.defaultBranch,
-          upstreamBranch,
-          options.maxCommitSamples,
-          options.maxChangedFiles,
-          logger,
-        )
-
-        onProgress({ type: "fork", fork: fork.fullName, detail: "Interpreting changes with Codex" })
-        analysis = await analyzeForkWithCodex(
-          fork,
-          upstreamFacts,
-          diffFacts,
-          upstreamAnalysis,
-          path.join(cwd, "schemas", "fork-analysis.schema.json"),
-          path.join(paths.codexRoot, fork.fullName.replace("/", "__")),
-          forkDir,
-          logger,
-        )
-
-        await saveForkCache(paths.forkCachePath(fork.fullName), fork, upstreamMetadata, diffFacts, analysis)
-      }
-
-      return {
-        metadata: fork,
-        diffFacts,
-        analysis,
-      }
-    })
+      },
+    )
+    const analysedForks = analysedForkResults.filter((fork): fork is AnalysedFork => fork !== null)
+    const skippedForkCount = selectedForks.length - analysedForks.length
+    const selectionWarning =
+      skippedForkCount > 0
+        ? `${skippedForkCount} selected fork${skippedForkCount === 1 ? "" : "s"} could not be analysed and were skipped.`
+        : null
 
     onProgress({ type: "phase", phase: "report", detail: "Rendering export files" })
     const report: FinalReport = {
@@ -198,7 +228,7 @@ export async function runAnalysis(
         scannedForkCount: selectedForks.length,
         archivedExcluded: 0,
         unchangedExcluded: 0,
-        selectionWarning: null,
+        selectionWarning,
       },
       forks: analysedForks,
       recommendations: computeRecommendations(analysedForks),

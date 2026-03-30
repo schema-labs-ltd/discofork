@@ -117,4 +117,24 @@ describe("renderMarkdownReport", () => {
     expect(markdown).toContain("Best maintained: forks/one")
     expect(markdown).toContain("Decision summary: Good default fork")
   })
+
+  test("renders an upstream-only report when all selected forks were skipped", () => {
+    const markdown = renderMarkdownReport({
+      ...report,
+      discovery: {
+        ...report.discovery,
+        selectionWarning: "2 selected forks could not be analysed and were skipped.",
+      },
+      forks: [],
+      recommendations: {
+        bestMaintained: null,
+        closestToUpstream: null,
+        mostFeatureRich: null,
+        mostOpinionated: null,
+      },
+    })
+
+    expect(markdown).toContain("Note: 2 selected forks could not be analysed and were skipped.")
+    expect(markdown).toContain("No fork analyses were completed for this run.")
+  })
 })

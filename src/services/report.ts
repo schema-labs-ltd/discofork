@@ -25,9 +25,17 @@ export function renderMarkdownReport(report: FinalReport): string {
   lines.push(`- Closest to upstream: ${report.recommendations.closestToUpstream ?? "None"}`)
   lines.push(`- Most feature-rich: ${report.recommendations.mostFeatureRich ?? "None"}`)
   lines.push(`- Most opinionated: ${report.recommendations.mostOpinionated ?? "None"}`)
+  if (report.discovery.selectionWarning) {
+    lines.push(`- Note: ${report.discovery.selectionWarning}`)
+  }
   lines.push("")
   lines.push("## Forks")
   lines.push("")
+
+  if (report.forks.length === 0) {
+    lines.push("No fork analyses were completed for this run.")
+    lines.push("")
+  }
 
   for (const fork of report.forks) {
     lines.push(`### ${fork.metadata.fullName}`)
