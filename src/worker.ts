@@ -2,6 +2,7 @@ import path from "node:path"
 
 import { toErrorMessage } from "./core/errors.ts"
 import { loadDiscovery, runAnalysis } from "./services/analysis.ts"
+import { cleanupWorkspaceRoot } from "./services/git.ts"
 import { parseGitHubRepoInput } from "./services/github.ts"
 import { writeRepoLiveStatus } from "./server/live-status.ts"
 import { acknowledgeRepoJob, dequeueRepoJob, requeueProcessingJob } from "./server/queue.ts"
@@ -15,6 +16,7 @@ const workerOptions = {
 }
 
 const DEQUEUE_TIMEOUT_SECONDS = 5
+const WORKSPACE_ROOT = process.env.DISCOFORK_WORKSPACE_ROOT ?? path.join(process.cwd(), ".discofork")
 
 let stopRequested = false
 let currentJob: string | null = null
@@ -66,7 +68,7 @@ async function processRepo(fullName: string): Promise<void> {
       selectedForks: selectedForks.map((fork) => fork.fullName),
       maxCommitSamples: 12,
       maxChangedFiles: 12,
-      workspaceRoot: path.join(process.cwd(), ".discofork"),
+      workspaceRoot: WORKSPACE_ROOT,
       runId: `worker-${Date.now()}`,
     },
     process.cwd(),
@@ -156,6 +158,12 @@ async function main(): Promise<void> {
     } finally {
       currentJob = null
       await acknowledgeRepoJob(fullName)
+
+      try {
+        await cleanupWorkspaceRoot(WORKSPACE_ROOT)
+      } catch (error) {
+        console.error(`Failed to clean workspace ${WORKSPACE_ROOT}: ${toErrorMessage(error)}`)
+      }
     }
   }
 

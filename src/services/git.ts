@@ -102,6 +102,33 @@ export async function cleanupManagedRepositories(reposRoot: string, logger?: Log
   await logger?.info("git_cleanup:finish", { reposRoot })
 }
 
+export async function cleanupWorkspaceRoot(workspaceRoot: string, logger?: Logger): Promise<void> {
+  const exists = await stat(workspaceRoot)
+    .then((entry) => entry.isDirectory())
+    .catch(() => false)
+
+  if (!exists) {
+    return
+  }
+
+  const entries = await readdir(workspaceRoot).catch(() => [])
+  if (entries.length === 0) {
+    return
+  }
+
+  await logger?.info("workspace_cleanup:start", {
+    workspaceRoot,
+    entries: entries.length,
+  })
+
+  await Promise.all(entries.map((entry) => rm(path.join(workspaceRoot, entry), { recursive: true, force: true })))
+
+  await logger?.info("workspace_cleanup:finish", {
+    workspaceRoot,
+    entries: entries.length,
+  })
+}
+
 export async function ensureUpstreamRemote(
   directory: string,
   upstream: GitHubRepoRef,

@@ -42,12 +42,15 @@ if ! codex login status >/dev/null 2>&1; then
 fi
 
 workspace_root="${DISCOFORK_WORKSPACE_ROOT:-${PWD}/.discofork}"
-clone_root="${workspace_root}/repos"
+mkdir -p "${workspace_root}"
 
-if [[ -d "${clone_root}" ]]; then
-  echo "Clearing stale cloned repositories from ${clone_root}..."
-  rm -rf "${clone_root}"
+shopt -s dotglob nullglob
+workspace_entries=("${workspace_root}"/*)
+if [[ ${#workspace_entries[@]} -gt 0 ]]; then
+  echo "Clearing mounted worker workspace from ${workspace_root}..."
+  rm -rf -- "${workspace_entries[@]}"
 fi
+shopt -u dotglob nullglob
 
 echo "Running migrations..."
 bun run migrate
