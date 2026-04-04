@@ -18,6 +18,17 @@ async function handleRefresh(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     generatedAt: snapshot.generatedAt,
+    openAIStats: snapshot.openAIStats.available
+      ? {
+          available: true,
+          freshness: snapshot.openAIStats.data.freshness,
+          note: snapshot.openAIStats.data.note,
+          fetchedAt: snapshot.openAIStats.data.fetchedAt,
+        }
+      : {
+          available: false,
+          reason: snapshot.openAIStats.reason,
+        },
   })
 }
 

@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises"
 import { GITHUB_API_PAUSE_UNTIL_KEY, GITHUB_RATE_LIMIT_SNAPSHOT_KEY } from "./constants"
 import { query } from "./database"
 import { getRedisClient, queueConfigured } from "./queue"
@@ -46,6 +47,9 @@ export type OpenAIStats = {
   currency: string
   usageSeries: OpenAIUsagePoint[]
   costSeries: OpenAICostPoint[]
+  fetchedAt: string
+  freshness: "fresh" | "stale"
+  note: string | null
 }
 
 export type OpenAIStatsResult =
@@ -86,6 +90,9 @@ export type StatsSnapshot = {
 }
 
 const STATS_SNAPSHOT_CACHE_KEY = "stats:snapshot:v2"
+const OPENAI_RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
+const OPENAI_MAX_ATTEMPTS = 3
+const OPENAI_RETRY_DELAY_MS = 750
 
 export async function getRepoOverviewStats(): Promise<RepoOverviewStats> {
   const rows = await query<RepoOverviewStats>(
@@ -368,19 +375,42 @@ async function writeStatsSnapshot(snapshot: StatsSnapshot): Promise<void> {
 }
 
 async function fetchOpenAI<T>(path: string, config: Extract<OpenAIApiConfig, { enabled: true }>): Promise<T> {
-  const response = await fetch(`https://api.openai.com/v1${path}`, {
-    headers: {
-      Authorization: `Bearer ${config.adminKey}`,
-      "Content-Type": "application/json",
-    },
-    cache: "no-store",
-  })
+  let lastError: Error | null = null
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API request failed with status ${response.status}.`)
+  for (let attempt = 1; attempt <= OPENAI_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`https://api.openai.com/v1${path}`, {
+        headers: {
+          Authorization: `Bearer ${config.adminKey}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        const error = new Error(`OpenAI API request failed with status ${response.status}.`)
+        if (OPENAI_RETRYABLE_STATUS_CODES.has(response.status) && attempt < OPENAI_MAX_ATTEMPTS) {
+          lastError = error
+          await sleep(OPENAI_RETRY_DELAY_MS * attempt)
+          continue
+        }
+
+        throw error
+      }
+
+      return (await response.json()) as T
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error("Could not load OpenAI usage data.")
+      lastError = normalized
+      if (attempt < OPENAI_MAX_ATTEMPTS) {
+        await sleep(OPENAI_RETRY_DELAY_MS * attempt)
+        continue
+      }
+      throw normalized
+    }
   }
 
-  return (await response.json()) as T
+  throw lastError ?? new Error("Could not load OpenAI usage data.")
 }
 
 type OpenAIUsageResponse = {
@@ -461,42 +491,40 @@ export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<Ope
   }
 
   const cacheKey = getOpenAIStatsCacheKey(config)
-  if (!options?.fresh) {
-    const cached = await readCachedOpenAIStats(cacheKey)
-    if (cached) {
-      return cached
-    }
-  }
-
-  const startTime = await getOpenAIStatsStartTime(config)
-  const nowUnix = Math.floor(Date.now() / 1000)
-  const todayStart = utcDayStartUnixToday()
-  const tomorrowStart = utcDayStartUnixTomorrow()
-  const bucketCount = daysBetweenInclusive(startTime, todayStart)
-
-  const usageParams = new URLSearchParams({
-    start_time: String(startTime),
-    end_time: String(nowUnix),
-    bucket_width: "1d",
-    limit: String(bucketCount),
-  })
-  const costParams = new URLSearchParams({
-    start_time: String(startTime),
-    end_time: String(tomorrowStart),
-    bucket_width: "1d",
-    limit: String(bucketCount),
-  })
-
-  if (config.apiKeyId) {
-    usageParams.append("api_key_ids", config.apiKeyId)
-  }
-
-  if (config.projectId) {
-    usageParams.append("project_ids", config.projectId)
-    costParams.append("project_ids", config.projectId)
+  const cached = await readCachedOpenAIStats(cacheKey)
+  if (!options?.fresh && cached) {
+    return cached
   }
 
   try {
+    const startTime = await getOpenAIStatsStartTime(config)
+    const nowUnix = Math.floor(Date.now() / 1000)
+    const todayStart = utcDayStartUnixToday()
+    const tomorrowStart = utcDayStartUnixTomorrow()
+    const bucketCount = daysBetweenInclusive(startTime, todayStart)
+
+    const usageParams = new URLSearchParams({
+      start_time: String(startTime),
+      end_time: String(nowUnix),
+      bucket_width: "1d",
+      limit: String(bucketCount),
+    })
+    const costParams = new URLSearchParams({
+      start_time: String(startTime),
+      end_time: String(tomorrowStart),
+      bucket_width: "1d",
+      limit: String(bucketCount),
+    })
+
+    if (config.apiKeyId) {
+      usageParams.append("api_key_ids", config.apiKeyId)
+    }
+
+    if (config.projectId) {
+      usageParams.append("project_ids", config.projectId)
+      costParams.append("project_ids", config.projectId)
+    }
+
     const [usageResponse, costResponse] = await Promise.all([
       fetchOpenAI<OpenAIUsageResponse>(`/organization/usage/completions?${usageParams.toString()}`, config),
       fetchOpenAI<OpenAICostResponse>(`/organization/costs?${costParams.toString()}`, config),
@@ -555,17 +583,30 @@ export async function getOpenAIStats(options?: { fresh?: boolean }): Promise<Ope
         currency: costSeries.find((point) => point.currency)?.currency ?? "usd",
         usageSeries,
         costSeries,
+        fetchedAt: new Date().toISOString(),
+        freshness: "fresh",
+        note: null,
       },
     }
     await writeCachedOpenAIStats(cacheKey, result)
     return result
   } catch (error) {
-    const result: OpenAIStatsResult = {
-      available: false,
-      reason: error instanceof Error ? error.message : "Could not load OpenAI usage data.",
+    const reason = error instanceof Error ? error.message : "Could not load OpenAI usage data."
+    if (cached?.available) {
+      return {
+        available: true,
+        data: {
+          ...cached.data,
+          freshness: "stale",
+          note: `Using cached OpenAI stats because ${reason}`,
+        },
+      }
     }
-    await writeCachedOpenAIStats(cacheKey, result)
-    return result
+
+    return {
+      available: false,
+      reason,
+    }
   }
 }
 
