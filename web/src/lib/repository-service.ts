@@ -130,6 +130,28 @@ async function writeCachedRepoExistence(fullName: string, exists: boolean): Prom
   }
 }
 
+async function probeGitHubRepositoryWithoutToken(fullName: string): Promise<boolean> {
+  const response = await fetch(`https://github.com/${fullName}`, {
+    method: "HEAD",
+    headers: {
+      Accept: "text/html",
+    },
+    cache: "no-store",
+  })
+
+  if (response.status === 404) {
+    return false
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to validate repository existence without a GitHub token: ${fullName} (status ${response.status}).`,
+    )
+  }
+
+  return true
+}
+
 async function ensureGitHubRepositoryExists(fullName: string): Promise<void> {
   const cached = await readCachedRepoExistence(fullName)
   if (cached === true) {
@@ -141,6 +163,13 @@ async function ensureGitHubRepositoryExists(fullName: string): Promise<void> {
 
   const token = githubToken()
   if (!token) {
+    const exists = await probeGitHubRepositoryWithoutToken(fullName)
+    await writeCachedRepoExistence(fullName, exists)
+
+    if (!exists) {
+      throw new RepositoryNotFoundError(fullName)
+    }
+
     return
   }
 
