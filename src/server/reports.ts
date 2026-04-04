@@ -1,3 +1,5 @@
+import { AppError } from "../core/errors.ts"
+import { serializeJsonSafely } from "../core/json.ts"
 import type { FinalReport } from "../core/types.ts"
 import { query } from "./database.ts"
 
@@ -135,19 +137,42 @@ export async function markRepoRetrying(fullName: string, retryCount: number, nex
 }
 
 export async function markRepoReady(report: FinalReport): Promise<void> {
-  await query(
-    `update repo_reports
-    set status = 'ready',
-        report_json = $2::jsonb,
-        error_message = null,
-        cached_at = now(),
-        retry_state = 'none',
-        next_retry_at = null,
-        last_error_message = null,
-        updated_at = now()
-    where full_name = $1`,
-    [report.repository.fullName, JSON.stringify(report)],
-  )
+  const serialized = serializeJsonSafely(report)
+
+  if (serialized.sanitizedPaths.length > 0) {
+    console.warn(
+      `Sanitized malformed Unicode before storing report_json for ${report.repository.fullName}: ${serialized.sanitizedPaths.join(", ")}`,
+    )
+  }
+
+  try {
+    await query(
+      `update repo_reports
+      set status = 'ready',
+          report_json = $2::jsonb,
+          error_message = null,
+          cached_at = now(),
+          retry_state = 'none',
+          next_retry_at = null,
+          last_error_message = null,
+          updated_at = now()
+      where full_name = $1`,
+      [report.repository.fullName, serialized.json],
+    )
+  } catch (error) {
+    if (error instanceof Error && /invalid input syntax for type json/i.test(error.message)) {
+      throw new AppError(
+        "INVALID_REPORT_JSON",
+        `Could not persist report_json for ${report.repository.fullName}. Sanitized paths: ${serialized.sanitizedPaths.join(", ") || "none recorded"}.`,
+        {
+          fullName: report.repository.fullName,
+          sanitizedPaths: serialized.sanitizedPaths,
+        },
+      )
+    }
+
+    throw error
+  }
 }
 
 export async function markRepoFailedTerminal(fullName: string, retryCount: number, errorMessage: string): Promise<void> {
