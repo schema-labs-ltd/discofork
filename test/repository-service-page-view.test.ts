@@ -14,6 +14,7 @@ let databaseEnabled = true
 let queueEnabled = true
 let repoRecord: any = null
 let statusSnapshot: any = null
+let fetchStatus = 200
 
 mock.module(databaseModulePath, () => ({
   databaseConfigured: () => databaseEnabled,
@@ -63,7 +64,7 @@ mock.module(reportsModulePath, () => ({
   },
 }))
 
-const { getRepositoryPageView, readRepositoryView } = await import(repositoryServiceModulePath)
+const { RepositoryNotFoundError, getRepositoryPageView, readRepositoryView } = await import(repositoryServiceModulePath)
 const originalFetch = globalThis.fetch
 
 beforeEach(() => {
@@ -71,6 +72,7 @@ beforeEach(() => {
   queueEnabled = true
   repoRecord = null
   statusSnapshot = null
+  fetchStatus = 200
   enqueueCalls.length = 0
   touchCalls.length = 0
   fetchCalls.length = 0
@@ -81,7 +83,7 @@ beforeEach(() => {
   globalThis.fetch = (async (input: Request | string | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     fetchCalls.push(url)
-    return new Response(null, { status: 200 })
+    return new Response(null, { status: fetchStatus })
   }) as typeof fetch
 })
 

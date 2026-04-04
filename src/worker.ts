@@ -4,20 +4,23 @@ import { toErrorMessage } from "./core/errors.ts"
 import { loadDiscovery, runAnalysis } from "./services/analysis.ts"
 import { cleanupWorkspaceRoot } from "./services/git.ts"
 import { parseGitHubRepoInput } from "./services/github.ts"
+import { isRetryableWorkerError, runWithRetries } from "./services/retry-policy.ts"
 import { writeRepoLiveStatus } from "./server/live-status.ts"
 import { acknowledgeRepoJob, dequeueRepoJob, requeueProcessingJob } from "./server/queue.ts"
-import { markRepoFailed, markRepoProcessing, markRepoQueued, markRepoReady } from "./server/reports.ts"
+import { markRepoFailedTerminal, markRepoProcessing, markRepoQueued, markRepoReady, markRepoRetrying } from "./server/reports.ts"
 import type { WorkerOptions } from "./worker-options.ts"
 import { loadWorkerOptions } from "./worker-options.ts"
 
 const DEQUEUE_TIMEOUT_SECONDS = 5
 const WORKSPACE_ROOT = process.env.DISCOFORK_WORKSPACE_ROOT ?? path.join(process.cwd(), ".discofork")
+const WORKER_MAX_RETRIES = Number(process.env.DISCOFORK_WORKER_MAX_RETRIES ?? "2")
+const WORKER_RETRY_BASE_DELAY_MS = Number(process.env.DISCOFORK_WORKER_RETRY_BASE_DELAY_MS ?? "5000")
 
 let stopRequested = false
 let currentJob: string | null = null
 let shutdownRequested = false
 
-async function processRepo(fullName: string, workerOptions: WorkerOptions): Promise<void> {
+async function processRepoOnce(fullName: string, workerOptions: WorkerOptions): Promise<void> {
   const repo = parseGitHubRepoInput(fullName)
   await markRepoProcessing(repo.fullName)
   await writeRepoLiveStatus(repo.fullName, {
@@ -124,6 +127,39 @@ async function processRepo(fullName: string, workerOptions: WorkerOptions): Prom
   })
 }
 
+async function processRepo(fullName: string, workerOptions: WorkerOptions): Promise<void> {
+  await runWithRetries({
+    maxRetries: WORKER_MAX_RETRIES,
+    baseDelayMs: WORKER_RETRY_BASE_DELAY_MS,
+    shouldRetry: isRetryableWorkerError,
+    operation: async () => {
+      await processRepoOnce(fullName, workerOptions)
+    },
+    onRetry: async ({ retryCount, delayMs, message, maxRetries }) => {
+      const nextRetryAt = new Date(Date.now() + delayMs).toISOString()
+      console.warn(`[${fullName}] retry ${retryCount}/${maxRetries}: ${message}`)
+      await markRepoRetrying(fullName, retryCount, nextRetryAt, message)
+      await writeRepoLiveStatus(fullName, {
+        status: "processing",
+        phase: "retry",
+        detail: `Retry ${retryCount} of ${maxRetries} scheduled for ${nextRetryAt}: ${message}`,
+        current: retryCount,
+        total: maxRetries,
+      })
+    },
+    onTerminalFailure: async ({ retryCount, message }) => {
+      await markRepoFailedTerminal(fullName, retryCount, message)
+      await writeRepoLiveStatus(fullName, {
+        status: "failed",
+        phase: "failed",
+        detail: message,
+        current: retryCount,
+        total: WORKER_MAX_RETRIES,
+      })
+    },
+  })
+}
+
 async function main(): Promise<void> {
   const workerOptions = loadWorkerOptions()
   console.log("Discofork worker started")
@@ -141,16 +177,7 @@ async function main(): Promise<void> {
       await processRepo(fullName, workerOptions)
       console.log(`Completed ${fullName}`)
     } catch (error) {
-      const message = toErrorMessage(error)
-      console.error(`Failed ${fullName}: ${message}`)
-      await markRepoFailed(fullName, message)
-      await writeRepoLiveStatus(fullName, {
-        status: "failed",
-        phase: "failed",
-        detail: message,
-        current: null,
-        total: null,
-      })
+      console.error(`Failed ${fullName}: ${toErrorMessage(error)}`)
     } finally {
       currentJob = null
       await acknowledgeRepoJob(fullName)

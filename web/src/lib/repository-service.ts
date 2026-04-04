@@ -57,6 +57,10 @@ export type QueuedRepoView = {
   progress: RepoProgressSnapshot | null
   errorMessage: string | null
   queueHint: string
+  retryCount: number
+  retryState: "none" | "retrying" | "terminal"
+  nextRetryAt: string | null
+  lastFailedAt: string | null
 }
 
 export type RepoView = CachedRepoView | QueuedRepoView
@@ -132,28 +136,6 @@ async function writeCachedRepoExistence(fullName: string, exists: boolean): Prom
   }
 }
 
-async function probeGitHubRepositoryWithoutToken(fullName: string): Promise<boolean> {
-  const response = await fetch(`https://github.com/${fullName}`, {
-    method: "HEAD",
-    headers: {
-      Accept: "text/html",
-    },
-    cache: "no-store",
-  })
-
-  if (response.status === 404) {
-    return false
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Unable to validate repository existence without a GitHub token: ${fullName} (status ${response.status}).`,
-    )
-  }
-
-  return true
-}
-
 async function ensureGitHubRepositoryExists(fullName: string): Promise<void> {
   const cached = await readCachedRepoExistence(fullName)
   if (cached === true) {
@@ -165,13 +147,6 @@ async function ensureGitHubRepositoryExists(fullName: string): Promise<void> {
 
   const token = githubToken()
   if (!token) {
-    const exists = await probeGitHubRepositoryWithoutToken(fullName)
-    await writeCachedRepoExistence(fullName, exists)
-
-    if (!exists) {
-      throw new RepositoryNotFoundError(fullName)
-    }
-
     return
   }
 
@@ -414,7 +389,17 @@ function queuedViewFromRecord(
     queuePosition: snapshot?.queuePosition ?? null,
     progress: snapshot?.progress ?? null,
     errorMessage: snapshot?.errorMessage ?? record.error_message ?? null,
-    queueHint: queueHintForStatus(queuedStatus, snapshot?.queuePosition ?? null),
+    queueHint: queueHintForStatus(
+      queuedStatus,
+      snapshot?.retryState ?? record.retry_state,
+      snapshot?.queuePosition ?? null,
+      snapshot?.nextRetryAt ?? record.next_retry_at,
+      snapshot?.retryCount ?? record.retry_count,
+    ),
+    retryCount: snapshot?.retryCount ?? record.retry_count,
+    retryState: snapshot?.retryState ?? record.retry_state,
+    nextRetryAt: snapshot?.nextRetryAt ?? record.next_retry_at,
+    lastFailedAt: snapshot?.lastFailedAt ?? record.last_failed_at,
   }
 }
 
@@ -433,6 +418,10 @@ function fallbackQueuedView(owner: string, repo: string, queueHint: string): Que
     progress: null,
     errorMessage: null,
     queueHint,
+    retryCount: 0,
+    retryState: "none",
+    nextRetryAt: null,
+    lastFailedAt: null,
   }
 }
 
@@ -493,12 +482,25 @@ export const getRepositoryPageView = cache(async (owner: string, repo: string): 
   return readRepositoryView(owner, repo)
 })
 
-function queueHintForStatus(status: StoredReportRecord["status"] | undefined, queuePosition: number | null): string {
+function queueHintForStatus(
+  status: StoredReportRecord["status"] | undefined,
+  retryState: StoredReportRecord["retry_state"] | undefined,
+  queuePosition: number | null,
+  nextRetryAt: string | null,
+  retryCount: number,
+): string {
   switch (status) {
     case "processing":
+      if (retryState === "retrying") {
+        return nextRetryAt
+          ? `Discofork is retrying this repository after a transient failure. Retry ${retryCount} is scheduled for ${nextRetryAt}.`
+          : `Discofork is retrying this repository after a transient failure. Retry ${retryCount} is pending.`
+      }
       return "This repository is currently being analyzed by Discofork."
     case "failed":
-      return "The last analysis failed. Requeue it to try another run."
+      return retryState === "terminal"
+        ? "The latest analysis exhausted the retry budget and now needs a manual requeue."
+        : "The latest analysis failed. Requeue it to try another run."
     case "queued":
       return queuePosition ? `This repository is queued for Discofork analysis. Current queue position: ${queuePosition}.` : "This repository has been queued for Discofork analysis."
     default:
