@@ -65,6 +65,7 @@ const suspiciousRepoNames = new Set([
   "phpinfo.php",
 ])
 const REPO_HEAD_TIMEOUT_MS = 8000
+const supportedGitHubRepoHosts = new Set(["github.com", "www.github.com"])
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -96,6 +97,10 @@ async function mapWithConcurrency<T, R>(
   return results
 }
 
+function isSupportedGitHubRepoHost(hostname: string): boolean {
+  return supportedGitHubRepoHosts.has(hostname.toLowerCase())
+}
+
 export function parseGitHubRepoInput(input: string): GitHubRepoRef {
   const trimmed = input.trim()
   if (!trimmed) {
@@ -122,7 +127,7 @@ export function parseGitHubRepoInput(input: string): GitHubRepoRef {
     throw new AppError("INVALID_REPO", "Repository must be a GitHub URL or owner/name.")
   }
 
-  if (!/github\.com$/i.test(url.hostname)) {
+  if (!isSupportedGitHubRepoHost(url.hostname)) {
     throw new AppError("INVALID_REPO", "Only github.com repository URLs are supported.")
   }
 

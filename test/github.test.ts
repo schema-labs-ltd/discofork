@@ -13,10 +13,20 @@ afterEach(() => {
 })
 
 describe("parseGitHubRepoInput", () => {
-  test("parses full GitHub URLs", () => {
+  test("accepts canonical GitHub repository hosts", () => {
     expect(parseGitHubRepoInput("https://github.com/openai/codex").fullName).toBe("openai/codex")
     expect(parseGitHubRepoInput("https://github.com/openai/codex.git").cloneUrl).toBe(
       "https://github.com/openai/codex.git",
+    )
+    expect(parseGitHubRepoInput("https://www.github.com/openai/codex").fullName).toBe("openai/codex")
+  })
+
+  test("rejects lookalike or non-repository GitHub hosts", () => {
+    expect(() => parseGitHubRepoInput("https://notgithub.com/openai/codex")).toThrow(
+      "Only github.com repository URLs are supported.",
+    )
+    expect(() => parseGitHubRepoInput("https://api.github.com/repos/openai/codex")).toThrow(
+      "Only github.com repository URLs are supported.",
     )
   })
 
