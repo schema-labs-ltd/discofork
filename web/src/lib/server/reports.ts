@@ -1,4 +1,5 @@
 import type { RepoListOrder, RepoListStatusFilter } from "../repository-list"
+import { SUSPICIOUS_REPOSITORY_ROUTE_SQL_PREDICATE } from "../repository-route-validation"
 import { query } from "./database"
 
 export type RepoRetryState = "none" | "retrying" | "terminal"
@@ -126,6 +127,16 @@ export async function touchQueuedRepo(owner: string, repo: string, queuedNow: bo
   )
 }
 
+export function buildRepoListWhereClause(statusFilter: RepoListStatusFilter): string {
+  const clauses = [`not (${SUSPICIOUS_REPOSITORY_ROUTE_SQL_PREDICATE})`]
+
+  if (statusFilter !== "all") {
+    clauses.push(`status = '${statusFilter}'`)
+  }
+
+  return `where ${clauses.join(" and ")}`
+}
+
 export async function listRepoRecords(
   page: number,
   pageSize: number,
@@ -135,7 +146,8 @@ export async function listRepoRecords(
   const safePage = Math.max(1, page)
   const safePageSize = Math.max(1, pageSize)
   const offset = (safePage - 1) * safePageSize
-  const statusWhereClause = statusFilter === "all" ? "" : `where status = '${statusFilter}'`
+  const baseWhereClause = buildRepoListWhereClause("all")
+  const listWhereClause = buildRepoListWhereClause(statusFilter)
   const orderByClause =
     order === "forks"
       ? "coalesce(nullif(report_json->'upstream'->'metadata'->>'forkCount', '')::int, -1) desc, updated_at desc, full_name asc"
@@ -151,7 +163,8 @@ export async function listRepoRecords(
       count(*) filter (where status in ('queued', 'processing'))::int as pending,
       count(*) filter (where status = 'ready')::int as cached,
       count(*) filter (where status = 'failed')::int as failed
-    from repo_reports`,
+    from repo_reports
+    ${baseWhereClause}`,
   )
   const stats = statRows[0] ?? {
     total: 0,
@@ -165,7 +178,7 @@ export async function listRepoRecords(
   const totalRows = await query<{ count: string }>(
     `select count(*)::text as count
     from repo_reports
-    ${statusWhereClause}`,
+    ${listWhereClause}`,
   )
   const total = Number.parseInt(totalRows[0]?.count ?? "0", 10)
 
@@ -191,7 +204,7 @@ export async function listRepoRecords(
       report_json->'upstream'->'analysis'->>'summary' as upstream_summary,
       coalesce(jsonb_array_length(coalesce(report_json->'forks', '[]'::jsonb)), 0) as fork_brief_count
     from repo_reports
-    ${statusWhereClause}
+    ${listWhereClause}
     order by ${orderByClause}
     limit $1
     offset $2`,

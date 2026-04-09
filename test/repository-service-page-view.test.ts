@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 
 const databaseModulePath = new URL("../web/src/lib/server/database.ts", import.meta.url).href
 const liveStatusModulePath = new URL("../web/src/lib/server/live-status.ts", import.meta.url).href
@@ -9,6 +9,7 @@ const repositoryServiceModulePath = new URL("../web/src/lib/repository-service.t
 const enqueueCalls: string[] = []
 const touchCalls: Array<{ owner: string; repo: string; queuedNow: boolean }> = []
 const fetchCalls: string[] = []
+const repoRecordLookups: string[] = []
 
 let databaseEnabled = true
 let queueEnabled = true
@@ -34,7 +35,10 @@ mock.module(queueModulePath, () => ({
 }))
 
 mock.module(reportsModulePath, () => ({
-  getRepoRecord: async () => repoRecord,
+  getRepoRecord: async (fullName: string) => {
+    repoRecordLookups.push(fullName)
+    return repoRecord
+  },
   touchQueuedRepo: async (owner: string, repo: string, queuedNow: boolean) => {
     touchCalls.push({ owner, repo, queuedNow })
     repoRecord = {
@@ -76,6 +80,7 @@ beforeEach(() => {
   enqueueCalls.length = 0
   touchCalls.length = 0
   fetchCalls.length = 0
+  repoRecordLookups.length = 0
   delete process.env.GH_TOKEN
   delete process.env.GITHUB_TOKEN
   process.env.REDIS_URL = "redis://example.test:6379"
@@ -111,4 +116,46 @@ describe("repository page view loading", () => {
     expect(touchCalls).toEqual([])
     expect(fetchCalls).toEqual([])
   })
+
+  test("rejects suspicious page routes before stored lookups, fetches, or queue mutations", async () => {
+    process.env.GH_TOKEN = "test-token"
+
+    await expect(getRepositoryPageView("admin", ".env")).rejects.toBeInstanceOf(RepositoryNotFoundError)
+
+    expect(repoRecordLookups).toEqual([])
+    expect(enqueueCalls).toEqual([])
+    expect(touchCalls).toEqual([])
+    expect(fetchCalls).toEqual([])
+  })
+
+  test("rejects suspicious read-only routes before stored lookup side effects", async () => {
+    process.env.GH_TOKEN = "test-token"
+    repoRecord = {
+      full_name: ".well-known/nodeinfo",
+      owner: ".well-known",
+      repo: "nodeinfo",
+      github_url: "https://github.com/.well-known/nodeinfo",
+      status: "queued",
+      report_json: null,
+      error_message: null,
+      last_requested_at: "2026-04-04T00:00:00Z",
+      queued_at: "2026-04-04T00:00:00Z",
+      processing_started_at: null,
+      cached_at: null,
+      created_at: "2026-04-04T00:00:00Z",
+      updated_at: "2026-04-04T00:00:00Z",
+    }
+
+    await expect(readRepositoryView(".well-known", "nodeinfo")).rejects.toBeInstanceOf(RepositoryNotFoundError)
+
+    expect(repoRecordLookups).toEqual([])
+    expect(enqueueCalls).toEqual([])
+    expect(touchCalls).toEqual([])
+    expect(fetchCalls).toEqual([])
+  })
+})
+
+
+afterAll(() => {
+  mock.restore()
 })
