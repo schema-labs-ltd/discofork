@@ -4,6 +4,7 @@ import { databaseConfigured } from "./server/database"
 import { getRepoStatusSnapshot, type RepoProgressSnapshot } from "./server/live-status"
 import { enqueueRepoJob, getRedisClient, queueConfigured } from "./server/queue"
 import { getRepoRecord, touchQueuedRepo, type StoredReportRecord } from "./server/reports"
+import { describeSuspiciousRepositoryRoute } from "./repository-route-validation"
 
 export type RepoRecommendationSet = {
   bestMaintained: string
@@ -73,6 +74,12 @@ export class RepositoryNotFoundError extends Error {
   constructor(fullName: string) {
     super(`Repository not found on GitHub: ${fullName}`)
     this.name = "RepositoryNotFoundError"
+  }
+}
+
+function assertRepositoryRouteIsAllowed(owner: string, repo: string): void {
+  if (describeSuspiciousRepositoryRoute(owner, repo)) {
+    throw new RepositoryNotFoundError(`${owner}/${repo}`)
   }
 }
 
@@ -442,6 +449,7 @@ async function readStoredRepositoryView(owner: string, repo: string): Promise<Re
 }
 
 export const readRepositoryView = cache(async (owner: string, repo: string): Promise<RepoView> => {
+  assertRepositoryRouteIsAllowed(owner, repo)
   const fullName = `${owner}/${repo}`
 
   if (databaseConfigured() && queueConfigured()) {
@@ -463,6 +471,7 @@ export const readRepositoryView = cache(async (owner: string, repo: string): Pro
 })
 
 export const getRepositoryPageView = cache(async (owner: string, repo: string): Promise<RepoView> => {
+  assertRepositoryRouteIsAllowed(owner, repo)
   const fullName = `${owner}/${repo}`
 
   if (databaseConfigured() && queueConfigured()) {
