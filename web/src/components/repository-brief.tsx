@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
-import { ArrowUpRight, ArrowUpDown, Clock3, Database, Download, Filter, GitFork, Radar, Star, X } from "lucide-react"
+import { ArrowUpRight, ArrowUpDown, Clock3, Database, Download, Filter, GitFork, Radar, Star, StickyNote, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { BookmarkButton } from "@/components/bookmark-button"
 import { WatchButton } from "@/components/watch-button"
 import { TagManager } from "@/components/tag-manager"
+import { NoteEditor } from "@/components/note-editor"
+import { ShareSnapshotButton } from "@/components/share-snapshot-button"
 import { buttonVariants } from "@/components/ui/button"
 import type { CachedRepoView, QueuedRepoView } from "@/lib/repository-service"
 import { exportRepoBrief } from "@/lib/export-brief"
 import { cn } from "@/lib/utils"
+import { calculateForkScore, getScoreBadgeVariant } from "@/lib/fork-score"
+import { hasNote } from "@/lib/notes"
 
 function SectionList({ title, items }: { title: string; items: string[] }) {
   return (
@@ -282,6 +286,7 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
   const maintenanceFilter = searchParams.get("maintenance") ?? ""
   const magnitudeFilter = searchParams.get("magnitude") ?? ""
   const sortBy = searchParams.get("sort") ?? ""
+  const forkParam = searchParams.get("fork") ?? ""
 
   const allMaintenances = useMemo(
     () => [...new Set(view.forks.map((f) => f.maintenance))].sort(),
@@ -307,12 +312,16 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
       result = [...result].sort((a, b) => a.changeMagnitude.localeCompare(b.changeMagnitude))
     } else if (sortBy === "name") {
       result = [...result].sort((a, b) => a.fullName.localeCompare(b.fullName))
+    } else if (sortBy === "score") {
+      result = [...result].sort((a, b) => calculateForkScore(b) - calculateForkScore(a))
     }
 
     return result
   }, [view.forks, maintenanceFilter, magnitudeFilter, sortBy])
 
-  const [selectedForkName, setSelectedForkName] = useState(filteredForks[0]?.fullName ?? "")
+  const [selectedForkName, setSelectedForkName] = useState(
+    forkParam && view.forks.some((f) => f.fullName === forkParam) ? forkParam : filteredForks[0]?.fullName ?? ""
+  )
   const selectedFork = filteredForks.find((fork) => fork.fullName === selectedForkName) ?? filteredForks[0]
 
   useEffect(() => {
@@ -333,7 +342,7 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
-  const hasActiveFilters = maintenanceFilter || magnitudeFilter || sortBy
+  const hasActiveFilters = maintenanceFilter || magnitudeFilter || sortBy || forkParam
 
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -370,10 +379,15 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
               <Download className="h-4 w-4" />
               Export .md
             </button>
+            <ShareSnapshotButton />
           </div>
 
           <div className="mt-4">
             <TagManager fullName={view.fullName} />
+          </div>
+
+          <div className="mt-3">
+            <NoteEditor fullName={view.fullName} />
           </div>
 
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-4">
@@ -445,12 +459,13 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
                 <option value="maintenance">Maintenance</option>
                 <option value="magnitude">Change magnitude</option>
                 <option value="name">Name</option>
+                <option value="score">Score</option>
               </select>
             </div>
             {hasActiveFilters ? (
               <button
                 type="button"
-                onClick={() => updateParams({ maintenance: "", magnitude: "", sort: "" })}
+                onClick={() => updateParams({ maintenance: "", magnitude: "", sort: "", fork: "" })}
                 className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -472,7 +487,12 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
                   <button
                     key={fork.fullName}
                     type="button"
-                    onClick={() => setSelectedForkName(fork.fullName)}
+                    onClick={() => {
+                      setSelectedForkName(fork.fullName)
+                      const params = new URLSearchParams(searchParams.toString())
+                      params.set("fork", fork.fullName)
+                      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+                    }}
                     className={cn(
                       "w-full border-b px-4 py-3 text-left transition-colors last:border-b-0",
                       active
@@ -482,8 +502,14 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-medium text-foreground">{fork.fullName}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-foreground">{fork.fullName}</span>
+                          {hasNote(fork.fullName) ? (
+                            <StickyNote className="h-3 w-3 text-amber-500" title="Has note" />
+                          ) : null}
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge variant={getScoreBadgeVariant(calculateForkScore(fork))}>{calculateForkScore(fork)}/100</Badge>
                           <Badge variant={fork.maintenance === "active" ? "success" : "muted"}>{fork.maintenance}</Badge>
                           <Badge variant="muted">{fork.changeMagnitude}</Badge>
                         </div>
@@ -507,11 +533,13 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold tracking-tight text-foreground">{selectedFork.fullName}</h3>
                 <div className="flex flex-wrap gap-2">
+                  <Badge variant={getScoreBadgeVariant(calculateForkScore(selectedFork))}>{calculateForkScore(selectedFork)}/100</Badge>
                   <Badge variant={selectedFork.maintenance === "active" ? "success" : "muted"}>{selectedFork.maintenance}</Badge>
                   <Badge variant="muted">{selectedFork.changeMagnitude}</Badge>
                 </div>
                 <p className="text-[15px] leading-7 text-muted-foreground">{selectedFork.summary}</p>
               </div>
+              <NoteEditor fullName={selectedFork.fullName} />
             </div>
 
             <section className="space-y-4 rounded-md border border-border bg-muted/70 p-5">
