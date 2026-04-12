@@ -19,13 +19,15 @@ function formatDate(isoString: string): string {
 
 function StatCell({ label, values }: { label: string; values: (string | number | null)[] }) {
   return (
-    <div className="grid gap-2 border-b border-border py-3 last:border-b-0" style={{ gridTemplateColumns: `120px repeat(${values.length}, 1fr)` }}>
+    <div className="space-y-1 border-b border-border py-3 last:border-b-0">
       <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-      {values.map((value, i) => (
-        <div key={i} className="text-sm text-foreground">
-          {value ?? "—"}
-        </div>
-      ))}
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${values.length}, 1fr)` }}>
+        {values.map((value, i) => (
+          <div key={i} className="text-sm text-foreground">
+            {value ?? "—"}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -38,13 +40,15 @@ function RecommendationRow({
   values: (string | null)[]
 }) {
   return (
-    <div className="grid gap-2 border-b border-border py-3 last:border-b-0" style={{ gridTemplateColumns: `120px repeat(${values.length}, 1fr)` }}>
+    <div className="space-y-1 border-b border-border py-3 last:border-b-0">
       <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-      {values.map((value, i) => (
-        <div key={i} className="text-sm text-foreground">
-          {value ?? "—"}
-        </div>
-      ))}
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${values.length}, 1fr)` }}>
+        {values.map((value, i) => (
+          <div key={i} className="text-sm text-foreground">
+            {value ?? "—"}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -149,10 +153,7 @@ function CompareContent() {
   return (
     <section className="space-y-6">
       {/* Column headers */}
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}
-      >
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {repos.map((view) => (
           <RepoColumnHeader key={view.fullName} view={view} />
         ))}
@@ -205,8 +206,7 @@ function CompareContent() {
             Top forks
           </div>
           <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}
+            className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
           >
             {repos.map((view) => (
               <div key={view.fullName} className="space-y-3">

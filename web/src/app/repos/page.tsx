@@ -202,11 +202,11 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
-            <form action="/repos" className="flex min-w-[280px] flex-1 flex-wrap items-center gap-2">
+            <form action="/repos" className="flex w-full flex-wrap items-center gap-2 sm:flex-1">
               <label htmlFor="repo-query" className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 Search
               </label>
-              <div className="relative min-w-[240px] flex-1">
+              <div className="relative w-full sm:min-w-[240px] sm:flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   id="repo-query"
