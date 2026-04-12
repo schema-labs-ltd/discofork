@@ -85,7 +85,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="space-y-6 border-l border-border pl-0 lg:pl-8">
+        <div className="space-y-6 border-l-0 border-border sm:border-l lg:pl-8">
           <div className="space-y-3">
             <div className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">What the script handles</div>
             <ul className="space-y-3 text-sm leading-7 text-muted-foreground">

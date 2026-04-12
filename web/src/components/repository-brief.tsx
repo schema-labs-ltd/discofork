@@ -348,7 +348,7 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         <div className="rounded-md border border-border bg-card p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start gap-2 sm:items-center sm:gap-3">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant="success">Cached analysis</Badge>
@@ -364,7 +364,7 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
               href={view.githubUrl}
               target="_blank"
               rel="noreferrer"
-              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-4")}
+              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-3 py-2 text-sm sm:px-4")}
             >
               GitHub
               <ArrowUpRight className="h-4 w-4" />
@@ -374,7 +374,7 @@ export function CachedRepositoryBrief({ view }: { view: CachedRepoView }) {
             <button
               type="button"
               onClick={() => exportRepoBrief(view)}
-              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-4")}
+              className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-3 py-2 text-sm sm:px-4")}
             >
               <Download className="h-4 w-4" />
               Export .md
