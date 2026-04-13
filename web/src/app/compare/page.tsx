@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { ArrowRight, GitCompareArrows } from "lucide-react"
+import { ArrowRight, Download, GitCompareArrows } from "lucide-react"
 
 import { RepoShell } from "@/components/repo-shell"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { CachedRepoView } from "@/lib/repository-service"
 import { getCompareSelection, setCompareSelection } from "@/lib/compare"
+import { exportComparison } from "@/lib/export-comparison"
 
 function formatDate(isoString: string): string {
   const date = new Date(isoString)
@@ -152,6 +153,19 @@ function CompareContent() {
 
   return (
     <section className="space-y-6">
+      {/* Export button */}
+      {repos.length >= 2 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => exportComparison(repos)}
+            className={cn(buttonVariants({ variant: "outline" }), "gap-2 rounded-md px-4")}
+          >
+            <Download className="h-4 w-4" />
+            Export .md
+          </button>
+        </div>
+      )}
+
       {/* Column headers */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {repos.map((view) => (
