@@ -21,7 +21,7 @@ export function normalizeRepoListQuery(rawValue: string | null | undefined): str
   return rawValue?.trim() ?? ""
 }
 
-export function buildRepoListHref(page: number, order: RepoListOrder, statusFilter: RepoListStatusFilter, query: string): string {
+export function buildRepoListHref(page: number, order: RepoListOrder, statusFilter: RepoListStatusFilter, query: string, language = ""): string {
   const params = new URLSearchParams()
 
   if (page > 1) {
@@ -33,6 +33,10 @@ export function buildRepoListHref(page: number, order: RepoListOrder, statusFilt
 
   if (query) {
     params.set("query", query)
+  }
+
+  if (language) {
+    params.set("language", language)
   }
 
   return `/repos?${params.toString()}`

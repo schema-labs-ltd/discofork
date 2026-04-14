@@ -5,6 +5,7 @@ import { Database, Search } from "lucide-react"
 import { CompareBar } from "@/components/compare-toggle"
 import { QueueInput } from "@/components/queue-input"
 import { RepoOrderSelect } from "@/components/repo-order-select"
+import { RepoLanguageFilter } from "@/components/repo-language-filter"
 import { RepoStatusFilter } from "@/components/repo-status-filter"
 import { RepoShell } from "@/components/repo-shell"
 import { RepoTagFilter } from "@/components/repo-tag-filter"
@@ -25,6 +26,7 @@ type RepoIndexPageProps = {
     order?: string
     status?: string
     query?: string
+    language?: string
   }>
 }
 
@@ -110,14 +112,31 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
   const order = parseRepoListOrder(resolvedSearchParams?.order)
   const statusFilter = parseRepoListStatusFilter(resolvedSearchParams?.status)
   const query = normalizeRepoListQuery(resolvedSearchParams?.query)
+  const language = resolvedSearchParams?.language?.trim() ?? ""
   const view = await loadRepositoryListView(page, order, statusFilter, query)
+
+  // Client-side language filter on upstreamSummary
+  const filteredItems = language
+    ? view.items.filter((item) => {
+        const summary = (item.upstreamSummary ?? "").toLowerCase()
+        const langLower = language.toLowerCase()
+        // Match exact language name or common aliases
+        const aliases: Record<string, string[]> = {
+          "c++": ["c++", "cpp", "c plus plus"],
+          "c#": ["c#", "csharp", "c sharp"],
+        }
+        const matchTerms = aliases[langLower] ?? [langLower]
+        return matchTerms.some((term) => summary.includes(term))
+      })
+    : view.items
+  const displayView = language ? { ...view, items: filteredItems, total: filteredItems.length } : view
   const previousHref = view.hasPrevious
-    ? buildRepoListHref(view.page - 1, view.order, view.statusFilter, view.query)
-    : buildRepoListHref(1, view.order, view.statusFilter, view.query)
+    ? buildRepoListHref(view.page - 1, view.order, view.statusFilter, view.query, language)
+    : buildRepoListHref(1, view.order, view.statusFilter, view.query, language)
   const nextHref = view.hasNext
-    ? buildRepoListHref(view.page + 1, view.order, view.statusFilter, view.query)
-    : buildRepoListHref(view.page, view.order, view.statusFilter, view.query)
-  const clearSearchHref = buildRepoListHref(1, view.order, view.statusFilter, "")
+    ? buildRepoListHref(view.page + 1, view.order, view.statusFilter, view.query, language)
+    : buildRepoListHref(view.page, view.order, view.statusFilter, view.query, language)
+  const clearSearchHref = buildRepoListHref(1, view.order, view.statusFilter, "", language)
 
   return (
     <RepoShell
@@ -134,7 +153,10 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-muted-foreground" />
-                <span>{view.total.toLocaleString()} {view.query ? "matching repos" : "repos"}</span>
+                <span>
+                  {view.total.toLocaleString()} {view.query ? "matching repos" : "repos"}
+                  {language ? ` · ${language}` : ""}
+                </span>
               </div>
               <div>Page {view.totalPages === 0 ? 0 : view.page} of {view.totalPages}</div>
               <div>{view.pageSize}/page</div>
@@ -164,6 +186,7 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
               </div>
               <input type="hidden" name="order" value={view.order} />
               <input type="hidden" name="status" value={view.statusFilter} />
+              {language ? <input type="hidden" name="language" value={language} /> : null}
               <div className="flex items-center gap-2">
                 <button type="submit" className={cn(buttonVariants({ variant: "outline" }), "rounded-md px-4")}>
                   Search
@@ -178,6 +201,7 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
 
             <div className="flex flex-wrap items-center gap-2">
               <RepoOrderSelect value={view.order} />
+              <RepoLanguageFilter />
               <RepoStatusFilter value={view.statusFilter} />
               <RepoViewToggle />
             </div>
@@ -213,10 +237,14 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
           <div className="rounded-md border border-border bg-card p-6 text-sm leading-7 text-muted-foreground">
             `DATABASE_URL` is not configured for the web backend yet, so the repository index is unavailable.
           </div>
-        ) : view.items.length === 0 ? (
+        ) : displayView.items.length === 0 ? (
           <div className="rounded-md border border-border bg-card p-6 space-y-4">
             <p className="text-sm leading-7 text-muted-foreground">
-              {view.query ? (
+              {language ? (
+                <>
+                  No repositories match the language filter <span className="font-medium text-foreground">"{language}"</span>. Try a different language or clear the filter.
+                </>
+              ) : view.query ? (
                 <>
                   No repositories match <span className="font-medium text-foreground">"{view.query}"</span>. Try a broader owner or repo name, or clear the search.
                 </>
@@ -232,8 +260,8 @@ export default async function ReposPage({ searchParams }: RepoIndexPageProps) {
             ) : null}
           </div>
         ) : (
-          <RepoListKeyboardProvider>
-            <RepoListView items={view.items} />
+            <RepoListKeyboardProvider>
+            <RepoListView items={displayView.items} />
           </RepoListKeyboardProvider>
         )}
       </section>
