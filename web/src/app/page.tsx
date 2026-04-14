@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowRight, Terminal } from "lucide-react"
 
+import { CopyInstallButton } from "@/components/copy-install-button"
 import { QueueInput } from "@/components/queue-input"
 import { RepoShell } from "@/components/repo-shell"
 import { TrendingRepos } from "@/components/trending-repos"
@@ -24,9 +25,12 @@ export default function HomePage() {
             <div className="space-y-5">
               <Badge variant="success">One command install</Badge>
               <div className="rounded-[1.25rem] border border-border bg-muted/70 p-4 font-mono text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div className="flex items-center gap-3 text-primary">
-                  <Terminal className="h-4 w-4" />
-                  <span>Installer</span>
+                <div className="flex items-center justify-between gap-3 text-primary">
+                  <div className="flex items-center gap-3">
+                    <Terminal className="h-4 w-4" />
+                    <span>Installer</span>
+                  </div>
+                  <CopyInstallButton command={installCommand} />
                 </div>
                 <div className="mt-3 break-all text-base leading-7">{installCommand}</div>
               </div>
