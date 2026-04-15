@@ -18,8 +18,36 @@ const store = createArrayStore<BookmarkEntry>({
   }),
 })
 
+export const BOOKMARKS_CHANGE_EVENT = "discofork:bookmark-change"
+
+function emitBookmarksChange(bookmarks: BookmarkEntry[] = getBookmarks()): void {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<{ bookmarks: BookmarkEntry[] }>(BOOKMARKS_CHANGE_EVENT, {
+      detail: { bookmarks },
+    }),
+  )
+}
+
 export const getBookmarks = store.getAll
 export const isBookmarked = store.has
-export const addBookmark = store.add
-export const removeBookmark = store.remove
-export const toggleBookmark = store.toggle
+
+export function addBookmark(owner: string, repo: string): BookmarkEntry {
+  const entry = store.add(owner, repo)
+  emitBookmarksChange(getBookmarks())
+  return entry
+}
+
+export function removeBookmark(fullName: string): void {
+  store.remove(fullName)
+  emitBookmarksChange(getBookmarks())
+}
+
+export function toggleBookmark(owner: string, repo: string): boolean {
+  const next = store.toggle(owner, repo)
+  emitBookmarksChange(getBookmarks())
+  return next
+}

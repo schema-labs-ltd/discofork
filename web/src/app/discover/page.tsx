@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, Calendar, Clock, GitFork, Shuffle, Star } from "lucide-react"
 
+import { BookmarkButton } from "@/components/bookmark-button"
+import { CompareToggle } from "@/components/compare-toggle"
 import { RepoShell } from "@/components/repo-shell"
+import { WatchButton } from "@/components/watch-button"
 import { Badge } from "@/components/ui/badge"
 import type { RepoListItem, RepoListView } from "@/lib/repository-list"
 
@@ -35,11 +38,11 @@ function shuffleArray<T>(items: T[]): T[] {
 
 function DiscoverCard({ item }: { item: RepoListItem }) {
   return (
-    <Link
-      href={`/${item.owner}/${item.repo}`}
-      className="group block rounded-[1.25rem] border border-border bg-card/70 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] transition-colors hover:border-primary/40"
-    >
-      <div className="space-y-3">
+    <div className="group rounded-[1.25rem] border border-border bg-card/70 shadow-[0_24px_80px_rgba(0,0,0,0.28)] transition-colors hover:border-primary/40">
+      <Link
+        href={`/${item.owner}/${item.repo}`}
+        className="block space-y-3 px-4 py-5 sm:px-5"
+      >
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">
             {item.fullName}
@@ -64,8 +67,23 @@ function DiscoverCard({ item }: { item: RepoListItem }) {
             {formatDate(item.lastPushedAt)}
           </Badge>
         </div>
+      </Link>
+
+      <div className="flex flex-col gap-3 border-t border-border/70 px-4 pb-5 pt-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          Triage in place
+        </span>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={`${item.fullName} quick actions`}
+        >
+          <CompareToggle fullName={item.fullName} showLabel compact />
+          <BookmarkButton owner={item.owner} repo={item.repo} variant="button" compact />
+          <WatchButton owner={item.owner} repo={item.repo} variant="button" compact />
+        </div>
       </div>
-    </Link>
+    </div>
   )
 }
 

@@ -4,17 +4,19 @@ import { useCallback, useEffect, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { WATCHES_CHANGE_EVENT, isWatched, toggleWatch } from "@/lib/watches"
 import { cn } from "@/lib/utils"
-import { isWatched, toggleWatch } from "@/lib/watches"
 
 export function WatchButton({
   owner,
   repo,
   variant = "icon",
+  compact = false,
 }: {
   owner: string
   repo: string
   variant?: "icon" | "button"
+  compact?: boolean
 }) {
   const [watched, setWatched] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -22,18 +24,39 @@ export function WatchButton({
 
   useEffect(() => {
     setMounted(true)
-    setWatched(isWatched(fullName))
+
+    const sync = () => {
+      setWatched(isWatched(fullName))
+    }
+
+    sync()
+    window.addEventListener("storage", sync)
+    window.addEventListener(WATCHES_CHANGE_EVENT, sync as EventListener)
+
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener(WATCHES_CHANGE_EVENT, sync as EventListener)
+    }
   }, [fullName])
 
-  const handleToggle = useCallback(() => {
+  const handleToggle = useCallback((event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+
     const next = toggleWatch(owner, repo)
     setWatched(next)
   }, [owner, repo])
 
+  const buttonClassName = cn(
+    "gap-2",
+    compact ? "h-8 rounded-full px-3 text-xs" : "rounded-md px-4",
+    watched && "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  )
+
   if (!mounted) {
     if (variant === "button") {
       return (
-        <Button variant="outline" className="gap-2 rounded-md px-4" disabled>
+        <Button type="button" variant="outline" className={buttonClassName} disabled>
           <Eye className="h-4 w-4" />
           Watch
         </Button>
@@ -45,6 +68,7 @@ export function WatchButton({
         disabled
         className="rounded-md p-2 text-muted-foreground opacity-50"
         aria-label="Watch"
+        aria-pressed={false}
       >
         <Eye className="h-4 w-4" />
       </button>
@@ -54,12 +78,11 @@ export function WatchButton({
   if (variant === "button") {
     return (
       <Button
+        type="button"
         variant="outline"
         onClick={handleToggle}
-        className={cn(
-          "gap-2 rounded-md px-4",
-          watched && "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-        )}
+        className={buttonClassName}
+        aria-pressed={watched}
       >
         {watched ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         {watched ? "Watching" : "Watch"}
@@ -78,6 +101,7 @@ export function WatchButton({
           : "text-muted-foreground hover:text-foreground",
       )}
       aria-label={watched ? "Unwatch" : "Watch"}
+      aria-pressed={watched}
     >
       {watched ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </button>

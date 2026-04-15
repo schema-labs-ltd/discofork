@@ -22,11 +22,39 @@ const store = createArrayStore<WatchEntry>({
   }),
 })
 
+export const WATCHES_CHANGE_EVENT = "discofork:watch-change"
+
+function emitWatchesChange(watches: WatchEntry[] = getWatches()): void {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<{ watches: WatchEntry[] }>(WATCHES_CHANGE_EVENT, {
+      detail: { watches },
+    }),
+  )
+}
+
 export const getWatches = store.getAll
 export const isWatched = store.has
-export const addWatch = store.add
-export const removeWatch = store.remove
-export const toggleWatch = store.toggle
+
+export function addWatch(owner: string, repo: string): WatchEntry {
+  const entry = store.add(owner, repo)
+  emitWatchesChange(getWatches())
+  return entry
+}
+
+export function removeWatch(fullName: string): void {
+  store.remove(fullName)
+  emitWatchesChange(getWatches())
+}
+
+export function toggleWatch(owner: string, repo: string): boolean {
+  const next = store.toggle(owner, repo)
+  emitWatchesChange(getWatches())
+  return next
+}
 
 export function touchWatch(fullName: string): void {
   const watches = getWatches()
@@ -35,6 +63,7 @@ export function touchWatch(fullName: string): void {
     entry.lastVisitedAt = new Date().toISOString()
     if (typeof window !== "undefined") {
       localStorage.setItem(WATCHES_STORAGE_KEY, JSON.stringify(watches))
+      emitWatchesChange(watches)
     }
   }
 }
