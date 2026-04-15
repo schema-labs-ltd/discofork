@@ -4,17 +4,19 @@ import { useCallback, useEffect, useState } from "react"
 import { Bookmark, BookmarkCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { BOOKMARKS_CHANGE_EVENT, isBookmarked, toggleBookmark } from "@/lib/bookmarks"
 import { cn } from "@/lib/utils"
-import { isBookmarked, toggleBookmark } from "@/lib/bookmarks"
 
 export function BookmarkButton({
   owner,
   repo,
   variant = "icon",
+  compact = false,
 }: {
   owner: string
   repo: string
   variant?: "icon" | "button"
+  compact?: boolean
 }) {
   const [bookmarked, setBookmarked] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -22,18 +24,39 @@ export function BookmarkButton({
 
   useEffect(() => {
     setMounted(true)
-    setBookmarked(isBookmarked(fullName))
+
+    const sync = () => {
+      setBookmarked(isBookmarked(fullName))
+    }
+
+    sync()
+    window.addEventListener("storage", sync)
+    window.addEventListener(BOOKMARKS_CHANGE_EVENT, sync as EventListener)
+
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener(BOOKMARKS_CHANGE_EVENT, sync as EventListener)
+    }
   }, [fullName])
 
-  const handleToggle = useCallback(() => {
+  const handleToggle = useCallback((event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+
     const next = toggleBookmark(owner, repo)
     setBookmarked(next)
   }, [owner, repo])
 
+  const buttonClassName = cn(
+    "gap-2",
+    compact ? "h-8 rounded-full px-3 text-xs" : "rounded-md px-4",
+    bookmarked && "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  )
+
   if (!mounted) {
     if (variant === "button") {
       return (
-        <Button variant="outline" className="gap-2 rounded-md px-4" disabled>
+        <Button type="button" variant="outline" className={buttonClassName} disabled>
           <Bookmark className="h-4 w-4" />
           Bookmark
         </Button>
@@ -45,6 +68,7 @@ export function BookmarkButton({
         disabled
         className="rounded-md p-2 text-muted-foreground opacity-50"
         aria-label="Bookmark"
+        aria-pressed={false}
       >
         <Bookmark className="h-4 w-4" />
       </button>
@@ -54,12 +78,11 @@ export function BookmarkButton({
   if (variant === "button") {
     return (
       <Button
+        type="button"
         variant="outline"
         onClick={handleToggle}
-        className={cn(
-          "gap-2 rounded-md px-4",
-          bookmarked && "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-        )}
+        className={buttonClassName}
+        aria-pressed={bookmarked}
       >
         {bookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
         {bookmarked ? "Bookmarked" : "Bookmark"}
@@ -78,6 +101,7 @@ export function BookmarkButton({
           : "text-muted-foreground hover:text-foreground",
       )}
       aria-label={bookmarked ? "Remove bookmark" : "Add bookmark"}
+      aria-pressed={bookmarked}
     >
       {bookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
     </button>

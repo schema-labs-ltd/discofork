@@ -22,9 +22,11 @@ function syncCompareSelection(
 export function CompareToggle({
   fullName,
   showLabel = false,
+  compact = false,
 }: {
   fullName: string
   showLabel?: boolean
+  compact?: boolean
 }) {
   const [selected, setSelected] = useState(false)
   const [repos, setRepos] = useState<string[]>([])
@@ -51,7 +53,7 @@ export function CompareToggle({
   const atCapacity = repos.length >= MAX_COMPARE_REPOS && !selected
 
   const handleToggle = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault()
       e.stopPropagation()
 
@@ -66,15 +68,27 @@ export function CompareToggle({
     [atCapacity, fullName],
   )
 
+  const compactButtonClassName = cn(
+    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
+    atCapacity && !selected && "cursor-not-allowed opacity-50",
+    selected
+      ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
+      : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
+  )
+
   if (!mounted) {
     return (
       <button
         type="button"
         disabled
-        className="rounded-md p-1.5 text-muted-foreground opacity-50"
+        className={compact || showLabel
+          ? "inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background/70 px-3 text-xs text-muted-foreground opacity-50"
+          : "rounded-md p-1.5 text-muted-foreground opacity-50"}
         aria-label="Add to compare"
+        aria-pressed={false}
       >
         <GitCompareArrows className="h-3.5 w-3.5" />
+        {compact || showLabel ? <span>{compact ? "Compare" : "Add"}</span> : null}
       </button>
     )
   }
@@ -84,18 +98,23 @@ export function CompareToggle({
       type="button"
       onClick={handleToggle}
       aria-disabled={atCapacity}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md p-1.5 transition-colors",
-        atCapacity && !selected && "cursor-not-allowed opacity-50",
-        selected
-          ? "bg-primary/10 text-primary hover:bg-primary/20"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-      )}
+      aria-pressed={selected}
+      className={compact
+        ? compactButtonClassName
+        : cn(
+            "flex items-center gap-1.5 rounded-md p-1.5 transition-colors",
+            atCapacity && !selected && "cursor-not-allowed opacity-50",
+            selected
+              ? "bg-primary/10 text-primary hover:bg-primary/20"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
       aria-label={selected ? "Remove from compare" : atCapacity ? "Compare limit reached" : "Add to compare"}
     >
       <GitCompareArrows className="h-3.5 w-3.5" />
-      {showLabel ? (
-        <span className="text-xs">{selected ? "Remove" : atCapacity ? "Limit reached" : "Compare"}</span>
+      {showLabel || compact ? (
+        <span className={compact ? undefined : "text-xs"}>
+          {selected ? (compact ? "Selected" : "Remove") : atCapacity ? "Limit reached" : "Compare"}
+        </span>
       ) : null}
     </button>
   )
