@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { ArrowUpRight, Bookmark, Clock, Eye, Shuffle, StickyNote, Menu, X } from "lucide-react"
+import { ArrowUpRight, Bookmark, Clock, Eye, Shuffle, StickyNote, Tag, Menu, X } from "lucide-react"
 
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CommandPalette } from "@/components/command-palette"
@@ -35,6 +35,10 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
       <Link href="/notes" className={cn(buttonVariants({ variant: "ghost" }), "gap-1.5 text-muted-foreground")} onClick={onNavigate}>
         <StickyNote className="h-4 w-4" />
         Notes
+      </Link>
+      <Link href="/tags" className={cn(buttonVariants({ variant: "ghost" }), "gap-1.5 text-muted-foreground")} onClick={onNavigate}>
+        <Tag className="h-4 w-4" />
+        Tags
       </Link>
       <Link href="/discover" className={cn(buttonVariants({ variant: "ghost" }), "gap-1.5 text-muted-foreground")} onClick={onNavigate}>
         <Shuffle className="h-4 w-4" />
