@@ -2,10 +2,12 @@ import Link from "next/link"
 import { ArrowRight, Compass, GitCompareArrows, Search, Terminal } from "lucide-react"
 
 import { CopyInstallButton } from "@/components/copy-install-button"
+import { DecisionShortcuts } from "@/components/decision-shortcuts"
 import { LocalWorkspacePanel } from "@/components/local-workspace-panel"
 import { QueueInput } from "@/components/queue-input"
 import { RandomDiscoveryButton } from "@/components/random-discovery-button"
 import { RecentlyViewedWidget } from "@/components/recently-viewed-widget"
+import { RepoLaunchBuilder } from "@/components/repo-launch-builder"
 import { RepoShell } from "@/components/repo-shell"
 import { StarterRepoGrid } from "@/components/starter-repo-grid"
 import { TrendingRepos } from "@/components/trending-repos"
@@ -195,6 +197,14 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <div className="mt-10 sm:mt-14">
+        <RepoLaunchBuilder />
+      </div>
+
+      <div className="mt-10 sm:mt-14">
+        <DecisionShortcuts />
+      </div>
 
       <div className="mt-10 sm:mt-14">
         <StarterRepoGrid />
